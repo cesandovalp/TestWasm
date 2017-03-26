@@ -1994,7 +1994,7 @@ var ASM_CONSTS = [];
 
 STATIC_BASE = 1024;
 
-STATICTOP = STATIC_BASE + 5456;
+STATICTOP = STATIC_BASE + 5696;
   /* global initializers */  __ATINIT__.push();
   
 
@@ -2003,7 +2003,7 @@ memoryInitializer = Module["wasmJSMethod"].indexOf("asmjs") >= 0 || Module["wasm
 
 
 
-var STATIC_BUMP = 5456;
+var STATIC_BUMP = 5696;
 Module["STATIC_BASE"] = STATIC_BASE;
 Module["STATIC_BUMP"] = STATIC_BUMP;
 
@@ -2047,32 +2047,2637 @@ function copyTempDouble(ptr) {
 // {{PRE_LIBRARY}}
 
 
-  
-  function ___setErrNo(value) {
-      if (Module['___errno_location']) HEAP32[((Module['___errno_location']())>>2)]=value;
-      else Module.printErr('failed to set errno from JS');
-      return value;
-    } 
-  Module["_sbrk"] = _sbrk;
-
    
   Module["_memset"] = _memset;
-
-  function ___lock() {}
-
-  
-  function _emscripten_memcpy_big(dest, src, num) {
-      HEAPU8.set(HEAPU8.subarray(src, src+num), dest);
-      return dest;
-    } 
-  Module["_memcpy"] = _memcpy;
 
   function _abort() {
       Module['abort']();
     }
 
-   
-  Module["_llvm_bswap_i32"] = _llvm_bswap_i32;
+  
+  var GL={counter:1,lastError:0,buffers:[],mappedBuffers:{},programs:[],framebuffers:[],renderbuffers:[],textures:[],uniforms:[],shaders:[],vaos:[],contexts:[],currentContext:null,offscreenCanvases:{},timerQueriesEXT:[],byteSizeByTypeRoot:5120,byteSizeByType:[1,1,2,2,4,4,4,2,3,4,8],programInfos:{},stringCache:{},tempFixedLengthArray:[],packAlignment:4,unpackAlignment:4,init:function () {
+        GL.miniTempBuffer = new Float32Array(GL.MINI_TEMP_BUFFER_SIZE);
+        for (var i = 0; i < GL.MINI_TEMP_BUFFER_SIZE; i++) {
+          GL.miniTempBufferViews[i] = GL.miniTempBuffer.subarray(0, i+1);
+        }
+  
+        // For functions such as glDrawBuffers, glInvalidateFramebuffer and glInvalidateSubFramebuffer that need to pass a short array to the WebGL API,
+        // create a set of short fixed-length arrays to avoid having to generate any garbage when calling those functions.
+        for (var i = 0; i < 32; i++) {
+          GL.tempFixedLengthArray.push(new Array(i));
+        }
+      },recordError:function recordError(errorCode) {
+        if (!GL.lastError) {
+          GL.lastError = errorCode;
+        }
+      },getNewId:function (table) {
+        var ret = GL.counter++;
+        for (var i = table.length; i < ret; i++) {
+          table[i] = null;
+        }
+        return ret;
+      },MINI_TEMP_BUFFER_SIZE:256,miniTempBuffer:null,miniTempBufferViews:[0],getSource:function (shader, count, string, length) {
+        var source = '';
+        for (var i = 0; i < count; ++i) {
+          var frag;
+          if (length) {
+            var len = HEAP32[(((length)+(i*4))>>2)];
+            if (len < 0) {
+              frag = Pointer_stringify(HEAP32[(((string)+(i*4))>>2)]);
+            } else {
+              frag = Pointer_stringify(HEAP32[(((string)+(i*4))>>2)], len);
+            }
+          } else {
+            frag = Pointer_stringify(HEAP32[(((string)+(i*4))>>2)]);
+          }
+          source += frag;
+        }
+        return source;
+      },createContext:function (canvas, webGLContextAttributes) {
+        if (typeof webGLContextAttributes['majorVersion'] === 'undefined' && typeof webGLContextAttributes['minorVersion'] === 'undefined') {
+          webGLContextAttributes['majorVersion'] = 1;
+          webGLContextAttributes['minorVersion'] = 0;
+        }
+        var ctx;
+        var errorInfo = '?';
+        function onContextCreationError(event) {
+          errorInfo = event.statusMessage || errorInfo;
+        }
+        try {
+          canvas.addEventListener('webglcontextcreationerror', onContextCreationError, false);
+          try {
+            if (webGLContextAttributes['majorVersion'] == 1 && webGLContextAttributes['minorVersion'] == 0) {
+              ctx = canvas.getContext("webgl", webGLContextAttributes) || canvas.getContext("experimental-webgl", webGLContextAttributes);
+            } else if (webGLContextAttributes['majorVersion'] == 2 && webGLContextAttributes['minorVersion'] == 0) {
+              ctx = canvas.getContext("webgl2", webGLContextAttributes) || canvas.getContext("experimental-webgl2", webGLContextAttributes);
+            } else {
+              throw 'Unsupported WebGL context version ' + majorVersion + '.' + minorVersion + '!'
+            }
+          } finally {
+            canvas.removeEventListener('webglcontextcreationerror', onContextCreationError, false);
+          }
+          if (!ctx) throw ':(';
+        } catch (e) {
+          Module.print('Could not create canvas: ' + [errorInfo, e, JSON.stringify(webGLContextAttributes)]);
+          return 0;
+        }
+        // possible GL_DEBUG entry point: ctx = wrapDebugGL(ctx);
+  
+        if (!ctx) return 0;
+        return GL.registerContext(ctx, webGLContextAttributes);
+      },registerContext:function (ctx, webGLContextAttributes) {
+        var handle = GL.getNewId(GL.contexts);
+        var context = {
+          handle: handle,
+          attributes: webGLContextAttributes,
+          version: webGLContextAttributes['majorVersion'],
+          GLctx: ctx
+        };
+  
+  
+        // Store the created context object so that we can access the context given a canvas without having to pass the parameters again.
+        if (ctx.canvas) ctx.canvas.GLctxObject = context;
+        GL.contexts[handle] = context;
+        if (typeof webGLContextAttributes['enableExtensionsByDefault'] === 'undefined' || webGLContextAttributes['enableExtensionsByDefault']) {
+          GL.initExtensions(context);
+        }
+        return handle;
+      },makeContextCurrent:function (contextHandle) {
+        var context = GL.contexts[contextHandle];
+        if (!context) return false;
+        GLctx = Module.ctx = context.GLctx; // Active WebGL context object.
+        GL.currentContext = context; // Active Emscripten GL layer context object.
+        return true;
+      },getContext:function (contextHandle) {
+        return GL.contexts[contextHandle];
+      },deleteContext:function (contextHandle) {
+        if (GL.currentContext === GL.contexts[contextHandle]) GL.currentContext = null;
+        if (typeof JSEvents === 'object') JSEvents.removeAllHandlersOnTarget(GL.contexts[contextHandle].GLctx.canvas); // Release all JS event handlers on the DOM element that the GL context is associated with since the context is now deleted.
+        if (GL.contexts[contextHandle] && GL.contexts[contextHandle].GLctx.canvas) GL.contexts[contextHandle].GLctx.canvas.GLctxObject = undefined; // Make sure the canvas object no longer refers to the context object so there are no GC surprises.
+        GL.contexts[contextHandle] = null;
+      },initExtensions:function (context) {
+        // If this function is called without a specific context object, init the extensions of the currently active context.
+        if (!context) context = GL.currentContext;
+  
+        if (context.initExtensionsDone) return;
+        context.initExtensionsDone = true;
+  
+        var GLctx = context.GLctx;
+  
+        context.maxVertexAttribs = GLctx.getParameter(GLctx.MAX_VERTEX_ATTRIBS);
+  
+        // Detect the presence of a few extensions manually, this GL interop layer itself will need to know if they exist. 
+  
+        if (context.version < 2) {
+          // Extension available from Firefox 26 and Google Chrome 30
+          var instancedArraysExt = GLctx.getExtension('ANGLE_instanced_arrays');
+          if (instancedArraysExt) {
+            GLctx['vertexAttribDivisor'] = function(index, divisor) { instancedArraysExt['vertexAttribDivisorANGLE'](index, divisor); };
+            GLctx['drawArraysInstanced'] = function(mode, first, count, primcount) { instancedArraysExt['drawArraysInstancedANGLE'](mode, first, count, primcount); };
+            GLctx['drawElementsInstanced'] = function(mode, count, type, indices, primcount) { instancedArraysExt['drawElementsInstancedANGLE'](mode, count, type, indices, primcount); };
+          }
+  
+          // Extension available from Firefox 25 and WebKit
+          var vaoExt = GLctx.getExtension('OES_vertex_array_object');
+          if (vaoExt) {
+            GLctx['createVertexArray'] = function() { return vaoExt['createVertexArrayOES'](); };
+            GLctx['deleteVertexArray'] = function(vao) { vaoExt['deleteVertexArrayOES'](vao); };
+            GLctx['bindVertexArray'] = function(vao) { vaoExt['bindVertexArrayOES'](vao); };
+            GLctx['isVertexArray'] = function(vao) { return vaoExt['isVertexArrayOES'](vao); };
+          }
+  
+          var drawBuffersExt = GLctx.getExtension('WEBGL_draw_buffers');
+          if (drawBuffersExt) {
+            GLctx['drawBuffers'] = function(n, bufs) { drawBuffersExt['drawBuffersWEBGL'](n, bufs); };
+          }
+        }
+  
+        GLctx.disjointTimerQueryExt = GLctx.getExtension("EXT_disjoint_timer_query");
+  
+        // These are the 'safe' feature-enabling extensions that don't add any performance impact related to e.g. debugging, and
+        // should be enabled by default so that client GLES2/GL code will not need to go through extra hoops to get its stuff working.
+        // As new extensions are ratified at http://www.khronos.org/registry/webgl/extensions/ , feel free to add your new extensions
+        // here, as long as they don't produce a performance impact for users that might not be using those extensions.
+        // E.g. debugging-related extensions should probably be off by default.
+        var automaticallyEnabledExtensions = [ "OES_texture_float", "OES_texture_half_float", "OES_standard_derivatives",
+                                               "OES_vertex_array_object", "WEBGL_compressed_texture_s3tc", "WEBGL_depth_texture",
+                                               "OES_element_index_uint", "EXT_texture_filter_anisotropic", "ANGLE_instanced_arrays",
+                                               "OES_texture_float_linear", "OES_texture_half_float_linear", "WEBGL_compressed_texture_atc",
+                                               "WEBGL_compressed_texture_pvrtc", "EXT_color_buffer_half_float", "WEBGL_color_buffer_float",
+                                               "EXT_frag_depth", "EXT_sRGB", "WEBGL_draw_buffers", "WEBGL_shared_resources",
+                                               "EXT_shader_texture_lod", "EXT_color_buffer_float"];
+  
+        function shouldEnableAutomatically(extension) {
+          var ret = false;
+          automaticallyEnabledExtensions.forEach(function(include) {
+            if (ext.indexOf(include) != -1) {
+              ret = true;
+            }
+          });
+          return ret;
+        }
+  
+        var exts = GLctx.getSupportedExtensions();
+        if (exts && exts.length > 0) {
+          GLctx.getSupportedExtensions().forEach(function(ext) {
+            if (automaticallyEnabledExtensions.indexOf(ext) != -1) {
+              GLctx.getExtension(ext); // Calling .getExtension enables that extension permanently, no need to store the return value to be enabled.
+            }
+          });
+        }
+      },populateUniformTable:function (program) {
+        var p = GL.programs[program];
+        GL.programInfos[program] = {
+          uniforms: {},
+          maxUniformLength: 0, // This is eagerly computed below, since we already enumerate all uniforms anyway.
+          maxAttributeLength: -1, // This is lazily computed and cached, computed when/if first asked, "-1" meaning not computed yet.
+          maxUniformBlockNameLength: -1 // Lazily computed as well
+        };
+  
+        var ptable = GL.programInfos[program];
+        var utable = ptable.uniforms;
+        // A program's uniform table maps the string name of an uniform to an integer location of that uniform.
+        // The global GL.uniforms map maps integer locations to WebGLUniformLocations.
+        var numUniforms = GLctx.getProgramParameter(p, GLctx.ACTIVE_UNIFORMS);
+        for (var i = 0; i < numUniforms; ++i) {
+          var u = GLctx.getActiveUniform(p, i);
+  
+          var name = u.name;
+          ptable.maxUniformLength = Math.max(ptable.maxUniformLength, name.length+1);
+  
+          // Strip off any trailing array specifier we might have got, e.g. "[0]".
+          if (name.indexOf(']', name.length-1) !== -1) {
+            var ls = name.lastIndexOf('[');
+            name = name.slice(0, ls);
+          }
+  
+          // Optimize memory usage slightly: If we have an array of uniforms, e.g. 'vec3 colors[3];', then 
+          // only store the string 'colors' in utable, and 'colors[0]', 'colors[1]' and 'colors[2]' will be parsed as 'colors'+i.
+          // Note that for the GL.uniforms table, we still need to fetch the all WebGLUniformLocations for all the indices.
+          var loc = GLctx.getUniformLocation(p, name);
+          if (loc != null)
+          {
+            var id = GL.getNewId(GL.uniforms);
+            utable[name] = [u.size, id];
+            GL.uniforms[id] = loc;
+  
+            for (var j = 1; j < u.size; ++j) {
+              var n = name + '['+j+']';
+              loc = GLctx.getUniformLocation(p, n);
+              id = GL.getNewId(GL.uniforms);
+  
+              GL.uniforms[id] = loc;
+            }
+          }
+        }
+      }};
+  
+  
+  var PATH={splitPath:function (filename) {
+        var splitPathRe = /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
+        return splitPathRe.exec(filename).slice(1);
+      },normalizeArray:function (parts, allowAboveRoot) {
+        // if the path tries to go above the root, `up` ends up > 0
+        var up = 0;
+        for (var i = parts.length - 1; i >= 0; i--) {
+          var last = parts[i];
+          if (last === '.') {
+            parts.splice(i, 1);
+          } else if (last === '..') {
+            parts.splice(i, 1);
+            up++;
+          } else if (up) {
+            parts.splice(i, 1);
+            up--;
+          }
+        }
+        // if the path is allowed to go above the root, restore leading ..s
+        if (allowAboveRoot) {
+          for (; up--; up) {
+            parts.unshift('..');
+          }
+        }
+        return parts;
+      },normalize:function (path) {
+        var isAbsolute = path.charAt(0) === '/',
+            trailingSlash = path.substr(-1) === '/';
+        // Normalize the path
+        path = PATH.normalizeArray(path.split('/').filter(function(p) {
+          return !!p;
+        }), !isAbsolute).join('/');
+        if (!path && !isAbsolute) {
+          path = '.';
+        }
+        if (path && trailingSlash) {
+          path += '/';
+        }
+        return (isAbsolute ? '/' : '') + path;
+      },dirname:function (path) {
+        var result = PATH.splitPath(path),
+            root = result[0],
+            dir = result[1];
+        if (!root && !dir) {
+          // No dirname whatsoever
+          return '.';
+        }
+        if (dir) {
+          // It has a dirname, strip trailing slash
+          dir = dir.substr(0, dir.length - 1);
+        }
+        return root + dir;
+      },basename:function (path) {
+        // EMSCRIPTEN return '/'' for '/', not an empty string
+        if (path === '/') return '/';
+        var lastSlash = path.lastIndexOf('/');
+        if (lastSlash === -1) return path;
+        return path.substr(lastSlash+1);
+      },extname:function (path) {
+        return PATH.splitPath(path)[3];
+      },join:function () {
+        var paths = Array.prototype.slice.call(arguments, 0);
+        return PATH.normalize(paths.join('/'));
+      },join2:function (l, r) {
+        return PATH.normalize(l + '/' + r);
+      },resolve:function () {
+        var resolvedPath = '',
+          resolvedAbsolute = false;
+        for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+          var path = (i >= 0) ? arguments[i] : FS.cwd();
+          // Skip empty and invalid entries
+          if (typeof path !== 'string') {
+            throw new TypeError('Arguments to path.resolve must be strings');
+          } else if (!path) {
+            return ''; // an invalid portion invalidates the whole thing
+          }
+          resolvedPath = path + '/' + resolvedPath;
+          resolvedAbsolute = path.charAt(0) === '/';
+        }
+        // At this point the path should be resolved to a full absolute path, but
+        // handle relative paths to be safe (might happen when process.cwd() fails)
+        resolvedPath = PATH.normalizeArray(resolvedPath.split('/').filter(function(p) {
+          return !!p;
+        }), !resolvedAbsolute).join('/');
+        return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+      },relative:function (from, to) {
+        from = PATH.resolve(from).substr(1);
+        to = PATH.resolve(to).substr(1);
+        function trim(arr) {
+          var start = 0;
+          for (; start < arr.length; start++) {
+            if (arr[start] !== '') break;
+          }
+          var end = arr.length - 1;
+          for (; end >= 0; end--) {
+            if (arr[end] !== '') break;
+          }
+          if (start > end) return [];
+          return arr.slice(start, end - start + 1);
+        }
+        var fromParts = trim(from.split('/'));
+        var toParts = trim(to.split('/'));
+        var length = Math.min(fromParts.length, toParts.length);
+        var samePartsLength = length;
+        for (var i = 0; i < length; i++) {
+          if (fromParts[i] !== toParts[i]) {
+            samePartsLength = i;
+            break;
+          }
+        }
+        var outputParts = [];
+        for (var i = samePartsLength; i < fromParts.length; i++) {
+          outputParts.push('..');
+        }
+        outputParts = outputParts.concat(toParts.slice(samePartsLength));
+        return outputParts.join('/');
+      }};
+  
+  
+  
+  function _emscripten_set_main_loop_timing(mode, value) {
+      Browser.mainLoop.timingMode = mode;
+      Browser.mainLoop.timingValue = value;
+  
+      if (!Browser.mainLoop.func) {
+        console.error('emscripten_set_main_loop_timing: Cannot set timing mode for main loop since a main loop does not exist! Call emscripten_set_main_loop first to set one up.');
+        return 1; // Return non-zero on failure, can't set timing mode when there is no main loop.
+      }
+  
+      if (mode == 0 /*EM_TIMING_SETTIMEOUT*/) {
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setTimeout() {
+          var timeUntilNextTick = Math.max(0, Browser.mainLoop.tickStartTime + value - _emscripten_get_now())|0;
+          setTimeout(Browser.mainLoop.runner, timeUntilNextTick); // doing this each time means that on exception, we stop
+        };
+        Browser.mainLoop.method = 'timeout';
+      } else if (mode == 1 /*EM_TIMING_RAF*/) {
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_rAF() {
+          Browser.requestAnimationFrame(Browser.mainLoop.runner);
+        };
+        Browser.mainLoop.method = 'rAF';
+      } else if (mode == 2 /*EM_TIMING_SETIMMEDIATE*/) {
+        if (!window['setImmediate']) {
+          // Emulate setImmediate. (note: not a complete polyfill, we don't emulate clearImmediate() to keep code size to minimum, since not needed)
+          var setImmediates = [];
+          var emscriptenMainLoopMessageId = 'setimmediate';
+          function Browser_setImmediate_messageHandler(event) {
+            if (event.source === window && event.data === emscriptenMainLoopMessageId) {
+              event.stopPropagation();
+              setImmediates.shift()();
+            }
+          }
+          window.addEventListener("message", Browser_setImmediate_messageHandler, true);
+          window['setImmediate'] = function Browser_emulated_setImmediate(func) {
+            setImmediates.push(func);
+            if (ENVIRONMENT_IS_WORKER) {
+              if (Module['setImmediates'] === undefined) Module['setImmediates'] = [];
+              Module['setImmediates'].push(func);
+              window.postMessage({target: emscriptenMainLoopMessageId}); // In --proxy-to-worker, route the message via proxyClient.js
+            } else window.postMessage(emscriptenMainLoopMessageId, "*"); // On the main thread, can just send the message to itself.
+          }
+        }
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setImmediate() {
+          window['setImmediate'](Browser.mainLoop.runner);
+        };
+        Browser.mainLoop.method = 'immediate';
+      }
+      return 0;
+    }
+  
+  function _emscripten_get_now() { abort() }function _emscripten_set_main_loop(func, fps, simulateInfiniteLoop, arg, noSetTiming) {
+      Module['noExitRuntime'] = true;
+  
+      assert(!Browser.mainLoop.func, 'emscripten_set_main_loop: there can only be one main loop function at once: call emscripten_cancel_main_loop to cancel the previous one before setting a new one with different parameters.');
+  
+      Browser.mainLoop.func = func;
+      Browser.mainLoop.arg = arg;
+  
+      var browserIterationFunc;
+      if (typeof arg !== 'undefined') {
+        browserIterationFunc = function() {
+          Module['dynCall_vi'](func, arg);
+        };
+      } else {
+        browserIterationFunc = function() {
+          Module['dynCall_v'](func);
+        };
+      }
+  
+      var thisMainLoopId = Browser.mainLoop.currentlyRunningMainloop;
+  
+      Browser.mainLoop.runner = function Browser_mainLoop_runner() {
+        if (ABORT) return;
+        if (Browser.mainLoop.queue.length > 0) {
+          var start = Date.now();
+          var blocker = Browser.mainLoop.queue.shift();
+          blocker.func(blocker.arg);
+          if (Browser.mainLoop.remainingBlockers) {
+            var remaining = Browser.mainLoop.remainingBlockers;
+            var next = remaining%1 == 0 ? remaining-1 : Math.floor(remaining);
+            if (blocker.counted) {
+              Browser.mainLoop.remainingBlockers = next;
+            } else {
+              // not counted, but move the progress along a tiny bit
+              next = next + 0.5; // do not steal all the next one's progress
+              Browser.mainLoop.remainingBlockers = (8*remaining + next)/9;
+            }
+          }
+          console.log('main loop blocker "' + blocker.name + '" took ' + (Date.now() - start) + ' ms'); //, left: ' + Browser.mainLoop.remainingBlockers);
+          Browser.mainLoop.updateStatus();
+          
+          // catches pause/resume main loop from blocker execution
+          if (thisMainLoopId < Browser.mainLoop.currentlyRunningMainloop) return;
+          
+          setTimeout(Browser.mainLoop.runner, 0);
+          return;
+        }
+  
+        // catch pauses from non-main loop sources
+        if (thisMainLoopId < Browser.mainLoop.currentlyRunningMainloop) return;
+  
+        // Implement very basic swap interval control
+        Browser.mainLoop.currentFrameNumber = Browser.mainLoop.currentFrameNumber + 1 | 0;
+        if (Browser.mainLoop.timingMode == 1/*EM_TIMING_RAF*/ && Browser.mainLoop.timingValue > 1 && Browser.mainLoop.currentFrameNumber % Browser.mainLoop.timingValue != 0) {
+          // Not the scheduled time to render this frame - skip.
+          Browser.mainLoop.scheduler();
+          return;
+        } else if (Browser.mainLoop.timingMode == 0/*EM_TIMING_SETTIMEOUT*/) {
+          Browser.mainLoop.tickStartTime = _emscripten_get_now();
+        }
+  
+        // Signal GL rendering layer that processing of a new frame is about to start. This helps it optimize
+        // VBO double-buffering and reduce GPU stalls.
+  
+  
+        if (Browser.mainLoop.method === 'timeout' && Module.ctx) {
+          Module.printErr('Looks like you are rendering without using requestAnimationFrame for the main loop. You should use 0 for the frame rate in emscripten_set_main_loop in order to use requestAnimationFrame, as that can greatly improve your frame rates!');
+          Browser.mainLoop.method = ''; // just warn once per call to set main loop
+        }
+  
+        Browser.mainLoop.runIter(browserIterationFunc);
+  
+        checkStackCookie();
+  
+        // catch pauses from the main loop itself
+        if (thisMainLoopId < Browser.mainLoop.currentlyRunningMainloop) return;
+  
+        // Queue new audio data. This is important to be right after the main loop invocation, so that we will immediately be able
+        // to queue the newest produced audio samples.
+        // TODO: Consider adding pre- and post- rAF callbacks so that GL.newRenderingFrameStarted() and SDL.audio.queueNewAudioData()
+        //       do not need to be hardcoded into this function, but can be more generic.
+        if (typeof SDL === 'object' && SDL.audio && SDL.audio.queueNewAudioData) SDL.audio.queueNewAudioData();
+  
+        Browser.mainLoop.scheduler();
+      }
+  
+      if (!noSetTiming) {
+        if (fps && fps > 0) _emscripten_set_main_loop_timing(0/*EM_TIMING_SETTIMEOUT*/, 1000.0 / fps);
+        else _emscripten_set_main_loop_timing(1/*EM_TIMING_RAF*/, 1); // Do rAF by rendering each frame (no decimating)
+  
+        Browser.mainLoop.scheduler();
+      }
+  
+      if (simulateInfiniteLoop) {
+        throw 'SimulateInfiniteLoop';
+      }
+    }var Browser={mainLoop:{scheduler:null,method:"",currentlyRunningMainloop:0,func:null,arg:0,timingMode:0,timingValue:0,currentFrameNumber:0,queue:[],pause:function () {
+          Browser.mainLoop.scheduler = null;
+          Browser.mainLoop.currentlyRunningMainloop++; // Incrementing this signals the previous main loop that it's now become old, and it must return.
+        },resume:function () {
+          Browser.mainLoop.currentlyRunningMainloop++;
+          var timingMode = Browser.mainLoop.timingMode;
+          var timingValue = Browser.mainLoop.timingValue;
+          var func = Browser.mainLoop.func;
+          Browser.mainLoop.func = null;
+          _emscripten_set_main_loop(func, 0, false, Browser.mainLoop.arg, true /* do not set timing and call scheduler, we will do it on the next lines */);
+          _emscripten_set_main_loop_timing(timingMode, timingValue);
+          Browser.mainLoop.scheduler();
+        },updateStatus:function () {
+          if (Module['setStatus']) {
+            var message = Module['statusMessage'] || 'Please wait...';
+            var remaining = Browser.mainLoop.remainingBlockers;
+            var expected = Browser.mainLoop.expectedBlockers;
+            if (remaining) {
+              if (remaining < expected) {
+                Module['setStatus'](message + ' (' + (expected - remaining) + '/' + expected + ')');
+              } else {
+                Module['setStatus'](message);
+              }
+            } else {
+              Module['setStatus']('');
+            }
+          }
+        },runIter:function (func) {
+          if (ABORT) return;
+          if (Module['preMainLoop']) {
+            var preRet = Module['preMainLoop']();
+            if (preRet === false) {
+              return; // |return false| skips a frame
+            }
+          }
+          try {
+            func();
+          } catch (e) {
+            if (e instanceof ExitStatus) {
+              return;
+            } else {
+              if (e && typeof e === 'object' && e.stack) Module.printErr('exception thrown: ' + [e, e.stack]);
+              throw e;
+            }
+          }
+          if (Module['postMainLoop']) Module['postMainLoop']();
+        }},isFullscreen:false,pointerLock:false,moduleContextCreatedCallbacks:[],workers:[],init:function () {
+        if (!Module["preloadPlugins"]) Module["preloadPlugins"] = []; // needs to exist even in workers
+  
+        if (Browser.initted) return;
+        Browser.initted = true;
+  
+        try {
+          new Blob();
+          Browser.hasBlobConstructor = true;
+        } catch(e) {
+          Browser.hasBlobConstructor = false;
+          console.log("warning: no blob constructor, cannot create blobs with mimetypes");
+        }
+        Browser.BlobBuilder = typeof MozBlobBuilder != "undefined" ? MozBlobBuilder : (typeof WebKitBlobBuilder != "undefined" ? WebKitBlobBuilder : (!Browser.hasBlobConstructor ? console.log("warning: no BlobBuilder") : null));
+        Browser.URLObject = typeof window != "undefined" ? (window.URL ? window.URL : window.webkitURL) : undefined;
+        if (!Module.noImageDecoding && typeof Browser.URLObject === 'undefined') {
+          console.log("warning: Browser does not support creating object URLs. Built-in browser image decoding will not be available.");
+          Module.noImageDecoding = true;
+        }
+  
+        // Support for plugins that can process preloaded files. You can add more of these to
+        // your app by creating and appending to Module.preloadPlugins.
+        //
+        // Each plugin is asked if it can handle a file based on the file's name. If it can,
+        // it is given the file's raw data. When it is done, it calls a callback with the file's
+        // (possibly modified) data. For example, a plugin might decompress a file, or it
+        // might create some side data structure for use later (like an Image element, etc.).
+  
+        var imagePlugin = {};
+        imagePlugin['canHandle'] = function imagePlugin_canHandle(name) {
+          return !Module.noImageDecoding && /\.(jpg|jpeg|png|bmp)$/i.test(name);
+        };
+        imagePlugin['handle'] = function imagePlugin_handle(byteArray, name, onload, onerror) {
+          var b = null;
+          if (Browser.hasBlobConstructor) {
+            try {
+              b = new Blob([byteArray], { type: Browser.getMimetype(name) });
+              if (b.size !== byteArray.length) { // Safari bug #118630
+                // Safari's Blob can only take an ArrayBuffer
+                b = new Blob([(new Uint8Array(byteArray)).buffer], { type: Browser.getMimetype(name) });
+              }
+            } catch(e) {
+              Runtime.warnOnce('Blob constructor present but fails: ' + e + '; falling back to blob builder');
+            }
+          }
+          if (!b) {
+            var bb = new Browser.BlobBuilder();
+            bb.append((new Uint8Array(byteArray)).buffer); // we need to pass a buffer, and must copy the array to get the right data range
+            b = bb.getBlob();
+          }
+          var url = Browser.URLObject.createObjectURL(b);
+          assert(typeof url == 'string', 'createObjectURL must return a url as a string');
+          var img = new Image();
+          img.onload = function img_onload() {
+            assert(img.complete, 'Image ' + name + ' could not be decoded');
+            var canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            Module["preloadedImages"][name] = canvas;
+            Browser.URLObject.revokeObjectURL(url);
+            if (onload) onload(byteArray);
+          };
+          img.onerror = function img_onerror(event) {
+            console.log('Image ' + url + ' could not be decoded');
+            if (onerror) onerror();
+          };
+          img.src = url;
+        };
+        Module['preloadPlugins'].push(imagePlugin);
+  
+        var audioPlugin = {};
+        audioPlugin['canHandle'] = function audioPlugin_canHandle(name) {
+          return !Module.noAudioDecoding && name.substr(-4) in { '.ogg': 1, '.wav': 1, '.mp3': 1 };
+        };
+        audioPlugin['handle'] = function audioPlugin_handle(byteArray, name, onload, onerror) {
+          var done = false;
+          function finish(audio) {
+            if (done) return;
+            done = true;
+            Module["preloadedAudios"][name] = audio;
+            if (onload) onload(byteArray);
+          }
+          function fail() {
+            if (done) return;
+            done = true;
+            Module["preloadedAudios"][name] = new Audio(); // empty shim
+            if (onerror) onerror();
+          }
+          if (Browser.hasBlobConstructor) {
+            try {
+              var b = new Blob([byteArray], { type: Browser.getMimetype(name) });
+            } catch(e) {
+              return fail();
+            }
+            var url = Browser.URLObject.createObjectURL(b); // XXX we never revoke this!
+            assert(typeof url == 'string', 'createObjectURL must return a url as a string');
+            var audio = new Audio();
+            audio.addEventListener('canplaythrough', function() { finish(audio) }, false); // use addEventListener due to chromium bug 124926
+            audio.onerror = function audio_onerror(event) {
+              if (done) return;
+              console.log('warning: browser could not fully decode audio ' + name + ', trying slower base64 approach');
+              function encode64(data) {
+                var BASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+                var PAD = '=';
+                var ret = '';
+                var leftchar = 0;
+                var leftbits = 0;
+                for (var i = 0; i < data.length; i++) {
+                  leftchar = (leftchar << 8) | data[i];
+                  leftbits += 8;
+                  while (leftbits >= 6) {
+                    var curr = (leftchar >> (leftbits-6)) & 0x3f;
+                    leftbits -= 6;
+                    ret += BASE[curr];
+                  }
+                }
+                if (leftbits == 2) {
+                  ret += BASE[(leftchar&3) << 4];
+                  ret += PAD + PAD;
+                } else if (leftbits == 4) {
+                  ret += BASE[(leftchar&0xf) << 2];
+                  ret += PAD;
+                }
+                return ret;
+              }
+              audio.src = 'data:audio/x-' + name.substr(-3) + ';base64,' + encode64(byteArray);
+              finish(audio); // we don't wait for confirmation this worked - but it's worth trying
+            };
+            audio.src = url;
+            // workaround for chrome bug 124926 - we do not always get oncanplaythrough or onerror
+            Browser.safeSetTimeout(function() {
+              finish(audio); // try to use it even though it is not necessarily ready to play
+            }, 10000);
+          } else {
+            return fail();
+          }
+        };
+        Module['preloadPlugins'].push(audioPlugin);
+  
+        // Canvas event setup
+  
+        function pointerLockChange() {
+          Browser.pointerLock = document['pointerLockElement'] === Module['canvas'] ||
+                                document['mozPointerLockElement'] === Module['canvas'] ||
+                                document['webkitPointerLockElement'] === Module['canvas'] ||
+                                document['msPointerLockElement'] === Module['canvas'];
+        }
+        var canvas = Module['canvas'];
+        if (canvas) {
+          // forced aspect ratio can be enabled by defining 'forcedAspectRatio' on Module
+          // Module['forcedAspectRatio'] = 4 / 3;
+          
+          canvas.requestPointerLock = canvas['requestPointerLock'] ||
+                                      canvas['mozRequestPointerLock'] ||
+                                      canvas['webkitRequestPointerLock'] ||
+                                      canvas['msRequestPointerLock'] ||
+                                      function(){};
+          canvas.exitPointerLock = document['exitPointerLock'] ||
+                                   document['mozExitPointerLock'] ||
+                                   document['webkitExitPointerLock'] ||
+                                   document['msExitPointerLock'] ||
+                                   function(){}; // no-op if function does not exist
+          canvas.exitPointerLock = canvas.exitPointerLock.bind(document);
+  
+          document.addEventListener('pointerlockchange', pointerLockChange, false);
+          document.addEventListener('mozpointerlockchange', pointerLockChange, false);
+          document.addEventListener('webkitpointerlockchange', pointerLockChange, false);
+          document.addEventListener('mspointerlockchange', pointerLockChange, false);
+  
+          if (Module['elementPointerLock']) {
+            canvas.addEventListener("click", function(ev) {
+              if (!Browser.pointerLock && Module['canvas'].requestPointerLock) {
+                Module['canvas'].requestPointerLock();
+                ev.preventDefault();
+              }
+            }, false);
+          }
+        }
+      },createContext:function (canvas, useWebGL, setInModule, webGLContextAttributes) {
+        if (useWebGL && Module.ctx && canvas == Module.canvas) return Module.ctx; // no need to recreate GL context if it's already been created for this canvas.
+  
+        var ctx;
+        var contextHandle;
+        if (useWebGL) {
+          // For GLES2/desktop GL compatibility, adjust a few defaults to be different to WebGL defaults, so that they align better with the desktop defaults.
+          var contextAttributes = {
+            antialias: false,
+            alpha: false
+          };
+  
+          if (webGLContextAttributes) {
+            for (var attribute in webGLContextAttributes) {
+              contextAttributes[attribute] = webGLContextAttributes[attribute];
+            }
+          }
+  
+          contextHandle = GL.createContext(canvas, contextAttributes);
+          if (contextHandle) {
+            ctx = GL.getContext(contextHandle).GLctx;
+          }
+        } else {
+          ctx = canvas.getContext('2d');
+        }
+  
+        if (!ctx) return null;
+  
+        if (setInModule) {
+          if (!useWebGL) assert(typeof GLctx === 'undefined', 'cannot set in module if GLctx is used, but we are a non-GL context that would replace it');
+  
+          Module.ctx = ctx;
+          if (useWebGL) GL.makeContextCurrent(contextHandle);
+          Module.useWebGL = useWebGL;
+          Browser.moduleContextCreatedCallbacks.forEach(function(callback) { callback() });
+          Browser.init();
+        }
+        return ctx;
+      },destroyContext:function (canvas, useWebGL, setInModule) {},fullscreenHandlersInstalled:false,lockPointer:undefined,resizeCanvas:undefined,requestFullscreen:function (lockPointer, resizeCanvas, vrDevice) {
+        Browser.lockPointer = lockPointer;
+        Browser.resizeCanvas = resizeCanvas;
+        Browser.vrDevice = vrDevice;
+        if (typeof Browser.lockPointer === 'undefined') Browser.lockPointer = true;
+        if (typeof Browser.resizeCanvas === 'undefined') Browser.resizeCanvas = false;
+        if (typeof Browser.vrDevice === 'undefined') Browser.vrDevice = null;
+  
+        var canvas = Module['canvas'];
+        function fullscreenChange() {
+          Browser.isFullscreen = false;
+          var canvasContainer = canvas.parentNode;
+          if ((document['fullscreenElement'] || document['mozFullScreenElement'] ||
+               document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
+               document['webkitCurrentFullScreenElement']) === canvasContainer) {
+            canvas.exitFullscreen = document['exitFullscreen'] ||
+                                    document['cancelFullScreen'] ||
+                                    document['mozCancelFullScreen'] ||
+                                    document['msExitFullscreen'] ||
+                                    document['webkitCancelFullScreen'] ||
+                                    function() {};
+            canvas.exitFullscreen = canvas.exitFullscreen.bind(document);
+            if (Browser.lockPointer) canvas.requestPointerLock();
+            Browser.isFullscreen = true;
+            if (Browser.resizeCanvas) Browser.setFullscreenCanvasSize();
+          } else {
+            
+            // remove the full screen specific parent of the canvas again to restore the HTML structure from before going full screen
+            canvasContainer.parentNode.insertBefore(canvas, canvasContainer);
+            canvasContainer.parentNode.removeChild(canvasContainer);
+            
+            if (Browser.resizeCanvas) Browser.setWindowedCanvasSize();
+          }
+          if (Module['onFullScreen']) Module['onFullScreen'](Browser.isFullscreen);
+          if (Module['onFullscreen']) Module['onFullscreen'](Browser.isFullscreen);
+          Browser.updateCanvasDimensions(canvas);
+        }
+  
+        if (!Browser.fullscreenHandlersInstalled) {
+          Browser.fullscreenHandlersInstalled = true;
+          document.addEventListener('fullscreenchange', fullscreenChange, false);
+          document.addEventListener('mozfullscreenchange', fullscreenChange, false);
+          document.addEventListener('webkitfullscreenchange', fullscreenChange, false);
+          document.addEventListener('MSFullscreenChange', fullscreenChange, false);
+        }
+  
+        // create a new parent to ensure the canvas has no siblings. this allows browsers to optimize full screen performance when its parent is the full screen root
+        var canvasContainer = document.createElement("div");
+        canvas.parentNode.insertBefore(canvasContainer, canvas);
+        canvasContainer.appendChild(canvas);
+  
+        // use parent of canvas as full screen root to allow aspect ratio correction (Firefox stretches the root to screen size)
+        canvasContainer.requestFullscreen = canvasContainer['requestFullscreen'] ||
+                                            canvasContainer['mozRequestFullScreen'] ||
+                                            canvasContainer['msRequestFullscreen'] ||
+                                           (canvasContainer['webkitRequestFullscreen'] ? function() { canvasContainer['webkitRequestFullscreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null) ||
+                                           (canvasContainer['webkitRequestFullScreen'] ? function() { canvasContainer['webkitRequestFullScreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null);
+  
+        if (vrDevice) {
+          canvasContainer.requestFullscreen({ vrDisplay: vrDevice });
+        } else {
+          canvasContainer.requestFullscreen();
+        }
+      },requestFullScreen:function (lockPointer, resizeCanvas, vrDevice) {
+          Module.printErr('Browser.requestFullScreen() is deprecated. Please call Browser.requestFullscreen instead.');
+          Browser.requestFullScreen = function(lockPointer, resizeCanvas, vrDevice) {
+            return Browser.requestFullscreen(lockPointer, resizeCanvas, vrDevice);
+          }
+          return Browser.requestFullscreen(lockPointer, resizeCanvas, vrDevice);
+      },nextRAF:0,fakeRequestAnimationFrame:function (func) {
+        // try to keep 60fps between calls to here
+        var now = Date.now();
+        if (Browser.nextRAF === 0) {
+          Browser.nextRAF = now + 1000/60;
+        } else {
+          while (now + 2 >= Browser.nextRAF) { // fudge a little, to avoid timer jitter causing us to do lots of delay:0
+            Browser.nextRAF += 1000/60;
+          }
+        }
+        var delay = Math.max(Browser.nextRAF - now, 0);
+        setTimeout(func, delay);
+      },requestAnimationFrame:function requestAnimationFrame(func) {
+        if (typeof window === 'undefined') { // Provide fallback to setTimeout if window is undefined (e.g. in Node.js)
+          Browser.fakeRequestAnimationFrame(func);
+        } else {
+          if (!window.requestAnimationFrame) {
+            window.requestAnimationFrame = window['requestAnimationFrame'] ||
+                                           window['mozRequestAnimationFrame'] ||
+                                           window['webkitRequestAnimationFrame'] ||
+                                           window['msRequestAnimationFrame'] ||
+                                           window['oRequestAnimationFrame'] ||
+                                           Browser.fakeRequestAnimationFrame;
+          }
+          window.requestAnimationFrame(func);
+        }
+      },safeCallback:function (func) {
+        return function() {
+          if (!ABORT) return func.apply(null, arguments);
+        };
+      },allowAsyncCallbacks:true,queuedAsyncCallbacks:[],pauseAsyncCallbacks:function () {
+        Browser.allowAsyncCallbacks = false;
+      },resumeAsyncCallbacks:function () { // marks future callbacks as ok to execute, and synchronously runs any remaining ones right now
+        Browser.allowAsyncCallbacks = true;
+        if (Browser.queuedAsyncCallbacks.length > 0) {
+          var callbacks = Browser.queuedAsyncCallbacks;
+          Browser.queuedAsyncCallbacks = [];
+          callbacks.forEach(function(func) {
+            func();
+          });
+        }
+      },safeRequestAnimationFrame:function (func) {
+        return Browser.requestAnimationFrame(function() {
+          if (ABORT) return;
+          if (Browser.allowAsyncCallbacks) {
+            func();
+          } else {
+            Browser.queuedAsyncCallbacks.push(func);
+          }
+        });
+      },safeSetTimeout:function (func, timeout) {
+        Module['noExitRuntime'] = true;
+        return setTimeout(function() {
+          if (ABORT) return;
+          if (Browser.allowAsyncCallbacks) {
+            func();
+          } else {
+            Browser.queuedAsyncCallbacks.push(func);
+          }
+        }, timeout);
+      },safeSetInterval:function (func, timeout) {
+        Module['noExitRuntime'] = true;
+        return setInterval(function() {
+          if (ABORT) return;
+          if (Browser.allowAsyncCallbacks) {
+            func();
+          } // drop it on the floor otherwise, next interval will kick in
+        }, timeout);
+      },getMimetype:function (name) {
+        return {
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'png': 'image/png',
+          'bmp': 'image/bmp',
+          'ogg': 'audio/ogg',
+          'wav': 'audio/wav',
+          'mp3': 'audio/mpeg'
+        }[name.substr(name.lastIndexOf('.')+1)];
+      },getUserMedia:function (func) {
+        if(!window.getUserMedia) {
+          window.getUserMedia = navigator['getUserMedia'] ||
+                                navigator['mozGetUserMedia'];
+        }
+        window.getUserMedia(func);
+      },getMovementX:function (event) {
+        return event['movementX'] ||
+               event['mozMovementX'] ||
+               event['webkitMovementX'] ||
+               0;
+      },getMovementY:function (event) {
+        return event['movementY'] ||
+               event['mozMovementY'] ||
+               event['webkitMovementY'] ||
+               0;
+      },getMouseWheelDelta:function (event) {
+        var delta = 0;
+        switch (event.type) {
+          case 'DOMMouseScroll': 
+            delta = event.detail;
+            break;
+          case 'mousewheel': 
+            delta = event.wheelDelta;
+            break;
+          case 'wheel': 
+            delta = event['deltaY'];
+            break;
+          default:
+            throw 'unrecognized mouse wheel event: ' + event.type;
+        }
+        return delta;
+      },mouseX:0,mouseY:0,mouseMovementX:0,mouseMovementY:0,touches:{},lastTouches:{},calculateMouseEvent:function (event) { // event should be mousemove, mousedown or mouseup
+        if (Browser.pointerLock) {
+          // When the pointer is locked, calculate the coordinates
+          // based on the movement of the mouse.
+          // Workaround for Firefox bug 764498
+          if (event.type != 'mousemove' &&
+              ('mozMovementX' in event)) {
+            Browser.mouseMovementX = Browser.mouseMovementY = 0;
+          } else {
+            Browser.mouseMovementX = Browser.getMovementX(event);
+            Browser.mouseMovementY = Browser.getMovementY(event);
+          }
+          
+          // check if SDL is available
+          if (typeof SDL != "undefined") {
+          	Browser.mouseX = SDL.mouseX + Browser.mouseMovementX;
+          	Browser.mouseY = SDL.mouseY + Browser.mouseMovementY;
+          } else {
+          	// just add the mouse delta to the current absolut mouse position
+          	// FIXME: ideally this should be clamped against the canvas size and zero
+          	Browser.mouseX += Browser.mouseMovementX;
+          	Browser.mouseY += Browser.mouseMovementY;
+          }        
+        } else {
+          // Otherwise, calculate the movement based on the changes
+          // in the coordinates.
+          var rect = Module["canvas"].getBoundingClientRect();
+          var cw = Module["canvas"].width;
+          var ch = Module["canvas"].height;
+  
+          // Neither .scrollX or .pageXOffset are defined in a spec, but
+          // we prefer .scrollX because it is currently in a spec draft.
+          // (see: http://www.w3.org/TR/2013/WD-cssom-view-20131217/)
+          var scrollX = ((typeof window.scrollX !== 'undefined') ? window.scrollX : window.pageXOffset);
+          var scrollY = ((typeof window.scrollY !== 'undefined') ? window.scrollY : window.pageYOffset);
+          // If this assert lands, it's likely because the browser doesn't support scrollX or pageXOffset
+          // and we have no viable fallback.
+          assert((typeof scrollX !== 'undefined') && (typeof scrollY !== 'undefined'), 'Unable to retrieve scroll position, mouse positions likely broken.');
+  
+          if (event.type === 'touchstart' || event.type === 'touchend' || event.type === 'touchmove') {
+            var touch = event.touch;
+            if (touch === undefined) {
+              return; // the "touch" property is only defined in SDL
+  
+            }
+            var adjustedX = touch.pageX - (scrollX + rect.left);
+            var adjustedY = touch.pageY - (scrollY + rect.top);
+  
+            adjustedX = adjustedX * (cw / rect.width);
+            adjustedY = adjustedY * (ch / rect.height);
+  
+            var coords = { x: adjustedX, y: adjustedY };
+            
+            if (event.type === 'touchstart') {
+              Browser.lastTouches[touch.identifier] = coords;
+              Browser.touches[touch.identifier] = coords;
+            } else if (event.type === 'touchend' || event.type === 'touchmove') {
+              var last = Browser.touches[touch.identifier];
+              if (!last) last = coords;
+              Browser.lastTouches[touch.identifier] = last;
+              Browser.touches[touch.identifier] = coords;
+            } 
+            return;
+          }
+  
+          var x = event.pageX - (scrollX + rect.left);
+          var y = event.pageY - (scrollY + rect.top);
+  
+          // the canvas might be CSS-scaled compared to its backbuffer;
+          // SDL-using content will want mouse coordinates in terms
+          // of backbuffer units.
+          x = x * (cw / rect.width);
+          y = y * (ch / rect.height);
+  
+          Browser.mouseMovementX = x - Browser.mouseX;
+          Browser.mouseMovementY = y - Browser.mouseY;
+          Browser.mouseX = x;
+          Browser.mouseY = y;
+        }
+      },asyncLoad:function (url, onload, onerror, noRunDep) {
+        var dep = !noRunDep ? getUniqueRunDependency('al ' + url) : '';
+        Module['readAsync'](url, function(arrayBuffer) {
+          assert(arrayBuffer, 'Loading data file "' + url + '" failed (no arrayBuffer).');
+          onload(new Uint8Array(arrayBuffer));
+          if (dep) removeRunDependency(dep);
+        }, function(event) {
+          if (onerror) {
+            onerror();
+          } else {
+            throw 'Loading data file "' + url + '" failed.';
+          }
+        });
+        if (dep) addRunDependency(dep);
+      },resizeListeners:[],updateResizeListeners:function () {
+        var canvas = Module['canvas'];
+        Browser.resizeListeners.forEach(function(listener) {
+          listener(canvas.width, canvas.height);
+        });
+      },setCanvasSize:function (width, height, noUpdates) {
+        var canvas = Module['canvas'];
+        Browser.updateCanvasDimensions(canvas, width, height);
+        if (!noUpdates) Browser.updateResizeListeners();
+      },windowedWidth:0,windowedHeight:0,setFullscreenCanvasSize:function () {
+        // check if SDL is available   
+        if (typeof SDL != "undefined") {
+        	var flags = HEAPU32[((SDL.screen+Runtime.QUANTUM_SIZE*0)>>2)];
+        	flags = flags | 0x00800000; // set SDL_FULLSCREEN flag
+        	HEAP32[((SDL.screen+Runtime.QUANTUM_SIZE*0)>>2)]=flags
+        }
+        Browser.updateResizeListeners();
+      },setWindowedCanvasSize:function () {
+        // check if SDL is available       
+        if (typeof SDL != "undefined") {
+        	var flags = HEAPU32[((SDL.screen+Runtime.QUANTUM_SIZE*0)>>2)];
+        	flags = flags & ~0x00800000; // clear SDL_FULLSCREEN flag
+        	HEAP32[((SDL.screen+Runtime.QUANTUM_SIZE*0)>>2)]=flags
+        }
+        Browser.updateResizeListeners();
+      },updateCanvasDimensions:function (canvas, wNative, hNative) {
+        if (wNative && hNative) {
+          canvas.widthNative = wNative;
+          canvas.heightNative = hNative;
+        } else {
+          wNative = canvas.widthNative;
+          hNative = canvas.heightNative;
+        }
+        var w = wNative;
+        var h = hNative;
+        if (Module['forcedAspectRatio'] && Module['forcedAspectRatio'] > 0) {
+          if (w/h < Module['forcedAspectRatio']) {
+            w = Math.round(h * Module['forcedAspectRatio']);
+          } else {
+            h = Math.round(w / Module['forcedAspectRatio']);
+          }
+        }
+        if (((document['fullscreenElement'] || document['mozFullScreenElement'] ||
+             document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
+             document['webkitCurrentFullScreenElement']) === canvas.parentNode) && (typeof screen != 'undefined')) {
+           var factor = Math.min(screen.width / w, screen.height / h);
+           w = Math.round(w * factor);
+           h = Math.round(h * factor);
+        }
+        if (Browser.resizeCanvas) {
+          if (canvas.width  != w) canvas.width  = w;
+          if (canvas.height != h) canvas.height = h;
+          if (typeof canvas.style != 'undefined') {
+            canvas.style.removeProperty( "width");
+            canvas.style.removeProperty("height");
+          }
+        } else {
+          if (canvas.width  != wNative) canvas.width  = wNative;
+          if (canvas.height != hNative) canvas.height = hNative;
+          if (typeof canvas.style != 'undefined') {
+            if (w != wNative || h != hNative) {
+              canvas.style.setProperty( "width", w + "px", "important");
+              canvas.style.setProperty("height", h + "px", "important");
+            } else {
+              canvas.style.removeProperty( "width");
+              canvas.style.removeProperty("height");
+            }
+          }
+        }
+      },wgetRequests:{},nextWgetRequestHandle:0,getNextWgetRequestHandle:function () {
+        var handle = Browser.nextWgetRequestHandle;
+        Browser.nextWgetRequestHandle++;
+        return handle;
+      }};
+  
+  
+  function _malloc(bytes) {
+      /* Over-allocate to make sure it is byte-aligned by 8.
+       * This will leak memory, but this is only the dummy
+       * implementation (replaced by dlmalloc normally) so
+       * not an issue.
+       */
+      var ptr = Runtime.dynamicAlloc(bytes + 8);
+      return (ptr+8) & 0xFFFFFFF8;
+    }
+  Module["_malloc"] = _malloc;
+  
+  function _free() {
+  }
+  Module["_free"] = _free;
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  var _environ=STATICTOP; STATICTOP += 16;;var ___environ=_environ;function ___buildEnvironment(env) {
+      // WARNING: Arbitrary limit!
+      var MAX_ENV_VALUES = 64;
+      var TOTAL_ENV_SIZE = 1024;
+  
+      // Statically allocate memory for the environment.
+      var poolPtr;
+      var envPtr;
+      if (!___buildEnvironment.called) {
+        ___buildEnvironment.called = true;
+        // Set default values. Use string keys for Closure Compiler compatibility.
+        ENV['USER'] = ENV['LOGNAME'] = 'web_user';
+        ENV['PATH'] = '/';
+        ENV['PWD'] = '/';
+        ENV['HOME'] = '/home/web_user';
+        ENV['LANG'] = 'C';
+        ENV['_'] = Module['thisProgram'];
+        // Allocate memory.
+        poolPtr = allocate(TOTAL_ENV_SIZE, 'i8', ALLOC_STATIC);
+        envPtr = allocate(MAX_ENV_VALUES * 4,
+                          'i8*', ALLOC_STATIC);
+        HEAP32[((envPtr)>>2)]=poolPtr;
+        HEAP32[((_environ)>>2)]=envPtr;
+      } else {
+        envPtr = HEAP32[((_environ)>>2)];
+        poolPtr = HEAP32[((envPtr)>>2)];
+      }
+  
+      // Collect key=value lines.
+      var strings = [];
+      var totalSize = 0;
+      for (var key in env) {
+        if (typeof env[key] === 'string') {
+          var line = key + '=' + env[key];
+          strings.push(line);
+          totalSize += line.length;
+        }
+      }
+      if (totalSize > TOTAL_ENV_SIZE) {
+        throw new Error('Environment size exceeded TOTAL_ENV_SIZE!');
+      }
+  
+      // Make new.
+      var ptrSize = 4;
+      for (var i = 0; i < strings.length; i++) {
+        var line = strings[i];
+        writeAsciiToMemory(line, poolPtr);
+        HEAP32[(((envPtr)+(i * ptrSize))>>2)]=poolPtr;
+        poolPtr += line.length + 1;
+      }
+      HEAP32[(((envPtr)+(strings.length * ptrSize))>>2)]=0;
+    }var ENV={};function _getenv(name) {
+      // char *getenv(const char *name);
+      // http://pubs.opengroup.org/onlinepubs/009695399/functions/getenv.html
+      if (name === 0) return 0;
+      name = Pointer_stringify(name);
+      if (!ENV.hasOwnProperty(name)) return 0;
+  
+      if (_getenv.ret) _free(_getenv.ret);
+      _getenv.ret = allocate(intArrayFromString(ENV[name]), 'i8', ALLOC_NORMAL);
+      return _getenv.ret;
+    }
+  
+  
+  var ERRNO_CODES={EPERM:1,ENOENT:2,ESRCH:3,EINTR:4,EIO:5,ENXIO:6,E2BIG:7,ENOEXEC:8,EBADF:9,ECHILD:10,EAGAIN:11,EWOULDBLOCK:11,ENOMEM:12,EACCES:13,EFAULT:14,ENOTBLK:15,EBUSY:16,EEXIST:17,EXDEV:18,ENODEV:19,ENOTDIR:20,EISDIR:21,EINVAL:22,ENFILE:23,EMFILE:24,ENOTTY:25,ETXTBSY:26,EFBIG:27,ENOSPC:28,ESPIPE:29,EROFS:30,EMLINK:31,EPIPE:32,EDOM:33,ERANGE:34,ENOMSG:42,EIDRM:43,ECHRNG:44,EL2NSYNC:45,EL3HLT:46,EL3RST:47,ELNRNG:48,EUNATCH:49,ENOCSI:50,EL2HLT:51,EDEADLK:35,ENOLCK:37,EBADE:52,EBADR:53,EXFULL:54,ENOANO:55,EBADRQC:56,EBADSLT:57,EDEADLOCK:35,EBFONT:59,ENOSTR:60,ENODATA:61,ETIME:62,ENOSR:63,ENONET:64,ENOPKG:65,EREMOTE:66,ENOLINK:67,EADV:68,ESRMNT:69,ECOMM:70,EPROTO:71,EMULTIHOP:72,EDOTDOT:73,EBADMSG:74,ENOTUNIQ:76,EBADFD:77,EREMCHG:78,ELIBACC:79,ELIBBAD:80,ELIBSCN:81,ELIBMAX:82,ELIBEXEC:83,ENOSYS:38,ENOTEMPTY:39,ENAMETOOLONG:36,ELOOP:40,EOPNOTSUPP:95,EPFNOSUPPORT:96,ECONNRESET:104,ENOBUFS:105,EAFNOSUPPORT:97,EPROTOTYPE:91,ENOTSOCK:88,ENOPROTOOPT:92,ESHUTDOWN:108,ECONNREFUSED:111,EADDRINUSE:98,ECONNABORTED:103,ENETUNREACH:101,ENETDOWN:100,ETIMEDOUT:110,EHOSTDOWN:112,EHOSTUNREACH:113,EINPROGRESS:115,EALREADY:114,EDESTADDRREQ:89,EMSGSIZE:90,EPROTONOSUPPORT:93,ESOCKTNOSUPPORT:94,EADDRNOTAVAIL:99,ENETRESET:102,EISCONN:106,ENOTCONN:107,ETOOMANYREFS:109,EUSERS:87,EDQUOT:122,ESTALE:116,ENOTSUP:95,ENOMEDIUM:123,EILSEQ:84,EOVERFLOW:75,ECANCELED:125,ENOTRECOVERABLE:131,EOWNERDEAD:130,ESTRPIPE:86};
+  
+  function ___setErrNo(value) {
+      if (Module['___errno_location']) HEAP32[((Module['___errno_location']())>>2)]=value;
+      else Module.printErr('failed to set errno from JS');
+      return value;
+    }function _putenv(string) {
+      // int putenv(char *string);
+      // http://pubs.opengroup.org/onlinepubs/009695399/functions/putenv.html
+      // WARNING: According to the standard (and the glibc implementation), the
+      //          string is taken by reference so future changes are reflected.
+      //          We copy it instead, possibly breaking some uses.
+      if (string === 0) {
+        ___setErrNo(ERRNO_CODES.EINVAL);
+        return -1;
+      }
+      string = Pointer_stringify(string);
+      var splitPoint = string.indexOf('=')
+      if (string === '' || string.indexOf('=') === -1) {
+        ___setErrNo(ERRNO_CODES.EINVAL);
+        return -1;
+      }
+      var name = string.slice(0, splitPoint);
+      var value = string.slice(splitPoint + 1);
+      if (!(name in ENV) || ENV[name] !== value) {
+        ENV[name] = value;
+        ___buildEnvironment(ENV);
+      }
+      return 0;
+    }
+  
+  function _SDL_RWFromConstMem(mem, size) {
+      var id = SDL.rwops.length; // TODO: recycle ids when they are null
+      SDL.rwops.push({ bytes: mem, count: size });
+      return id;
+    }function _TTF_FontHeight(font) {
+      var fontData = SDL.fonts[font];
+      return fontData.size;
+    }function _TTF_SizeText(font, text, w, h) {
+      var fontData = SDL.fonts[font];
+      if (w) {
+        HEAP32[((w)>>2)]=SDL.estimateTextWidth(fontData, Pointer_stringify(text));
+      }
+      if (h) {
+        HEAP32[((h)>>2)]=fontData.size;
+      }
+      return 0;
+    }function _TTF_RenderText_Solid(font, text, color) {
+      // XXX the font and color are ignored
+      text = Pointer_stringify(text) || ' '; // if given an empty string, still return a valid surface
+      var fontData = SDL.fonts[font];
+      var w = SDL.estimateTextWidth(fontData, text);
+      var h = fontData.size;
+      var color = SDL.loadColorToCSSRGB(color); // XXX alpha breaks fonts?
+      var fontString = h + 'px ' + fontData.name;
+      var surf = SDL.makeSurface(w, h, 0, false, 'text:' + text); // bogus numbers..
+      var surfData = SDL.surfaces[surf];
+      surfData.ctx.save();
+      surfData.ctx.fillStyle = color;
+      surfData.ctx.font = fontString;
+      surfData.ctx.textBaseline = 'top';
+      surfData.ctx.fillText(text, 0, 0);
+      surfData.ctx.restore();
+      return surf;
+    }function _Mix_HaltMusic() {
+      var audio = SDL.music.audio;
+      if (audio) {
+        audio.src = audio.src; // rewind <media> element
+        audio.currentPosition = 0; // rewind Web Audio graph playback.
+        audio.pause();
+      }
+      SDL.music.audio = null;
+      if (SDL.hookMusicFinished) {
+        Module['dynCall_v'](SDL.hookMusicFinished);
+      }
+      return 0;
+    }function _Mix_PlayMusic(id, loops) {
+      // Pause old music if it exists.
+      if (SDL.music.audio) {
+        if (!SDL.music.audio.paused) Module.printErr('Music is already playing. ' + SDL.music.source);
+        SDL.music.audio.pause();
+      }
+      var info = SDL.audios[id];
+      var audio;
+      if (info.webAudio) { // Play via Web Audio API
+        // Create an instance of the WebAudio object.
+        audio = {};
+        audio.resource = info; // This new webAudio object is an instance that refers to this existing resource.
+        audio.paused = false;
+        audio.currentPosition = 0;
+        audio.play = function() { SDL.playWebAudio(this); }
+        audio.pause = function() { SDL.pauseWebAudio(this); }
+      } else if (info.audio) { // Play via the <audio> element
+        audio = info.audio;
+      }
+      audio['onended'] = function() { if (SDL.music.audio == this) _Mix_HaltMusic(); } // will send callback
+      audio.loop = loops != 0; // TODO: handle N loops for finite N
+      audio.volume = SDL.music.volume;
+      SDL.music.audio = audio;
+      audio.play();
+      return 0;
+    }function _Mix_FreeChunk(id) {
+      SDL.audios[id] = null;
+    }function _Mix_LoadWAV_RW(rwopsID, freesrc) {
+      var rwops = SDL.rwops[rwopsID];
+  
+  
+      if (rwops === undefined)
+        return 0;
+  
+      var filename = '';
+      var audio;
+      var webAudio;
+      var bytes;
+  
+      if (rwops.filename !== undefined) {
+        filename = PATH.resolve(rwops.filename);
+        var raw = Module["preloadedAudios"][filename];
+        if (!raw) {
+          if (raw === null) Module.printErr('Trying to reuse preloaded audio, but freePreloadedMediaOnUse is set!');
+          if (!Module.noAudioDecoding) Runtime.warnOnce('Cannot find preloaded audio ' + filename);
+  
+          // see if we can read the file-contents from the in-memory FS
+          try {
+            bytes = FS.readFile(filename);
+          } catch (e) {
+            Module.printErr('Couldn\'t find file for: ' + filename);
+            return 0;
+          }
+        }
+        if (Module['freePreloadedMediaOnUse']) {
+          Module["preloadedAudios"][filename] = null;
+        }
+        audio = raw;
+      }
+      else if (rwops.bytes !== undefined) {
+        // For Web Audio context buffer decoding, we must make a clone of the audio data, but for <media> element,
+        // a view to existing data is sufficient.
+        if (SDL.webAudioAvailable()) bytes = HEAPU8.buffer.slice(rwops.bytes, rwops.bytes + rwops.count);
+        else bytes = HEAPU8.subarray(rwops.bytes, rwops.bytes + rwops.count);
+      }
+      else {
+        return 0;
+      }
+  
+      var arrayBuffer = bytes ? bytes.buffer || bytes : bytes;
+  
+      // To allow user code to work around browser bugs with audio playback on <audio> elements an Web Audio, enable
+      // the user code to hook in a callback to decide on a file basis whether each file should use Web Audio or <audio> for decoding and playback.
+      // In particular, see https://bugzilla.mozilla.org/show_bug.cgi?id=654787 and ?id=1012801 for tradeoffs.
+      var canPlayWithWebAudio = Module['SDL_canPlayWithWebAudio'] === undefined || Module['SDL_canPlayWithWebAudio'](filename, arrayBuffer);
+  
+      if (bytes !== undefined && SDL.webAudioAvailable() && canPlayWithWebAudio) {
+        audio = undefined;
+        webAudio = {};
+        // The audio decoding process is asynchronous, which gives trouble if user code plays the audio data back immediately
+        // after loading. Therefore prepare an array of callback handlers to run when this audio decoding is complete, which
+        // will then start the playback (with some delay).
+        webAudio.onDecodeComplete = []; // While this member array exists, decoding hasn't finished yet.
+        function onDecodeComplete(data) {
+          webAudio.decodedBuffer = data;
+          // Call all handlers that were waiting for this decode to finish, and clear the handler list.
+          webAudio.onDecodeComplete.forEach(function(e) { e(); });
+          webAudio.onDecodeComplete = undefined; // Don't allow more callback handlers since audio has finished decoding.
+        }
+  
+        SDL.audioContext['decodeAudioData'](arrayBuffer, onDecodeComplete);
+      } else if (audio === undefined && bytes) {
+        // Here, we didn't find a preloaded audio but we either were passed a filepath for
+        // which we loaded bytes, or we were passed some bytes
+        var blob = new Blob([bytes], {type: rwops.mimetype});
+        var url = URL.createObjectURL(blob);
+        audio = new Audio();
+        audio.src = url;
+        audio.mozAudioChannelType = 'content'; // bugzilla 910340
+      }
+  
+      var id = SDL.audios.length;
+      // Keep the loaded audio in the audio arrays, ready for playback
+      SDL.audios.push({
+        source: filename,
+        audio: audio, // Points to the <audio> element, if loaded
+        webAudio: webAudio // Points to a Web Audio -specific resource object, if loaded
+      });
+      return id;
+    }function _Mix_PlayChannel(channel, id, loops) {
+      // TODO: handle fixed amount of N loops. Currently loops either 0 or infinite times.
+  
+      // Get the audio element associated with the ID
+      var info = SDL.audios[id];
+      if (!info) return -1;
+      if (!info.audio && !info.webAudio) return -1;
+  
+      // If the user asks us to allocate a channel automatically, get the first
+      // free one.
+      if (channel == -1) {
+        for (var i = SDL.channelMinimumNumber; i < SDL.numChannels; i++) {
+          if (!SDL.channels[i].audio) {
+            channel = i;
+            break;
+          }
+        }
+        if (channel == -1) {
+          Module.printErr('All ' + SDL.numChannels + ' channels in use!');
+          return -1;
+        }
+      }
+      var channelInfo = SDL.channels[channel];
+      var audio;
+      if (info.webAudio) {
+        // Create an instance of the WebAudio object.
+        audio = {};
+        audio.resource = info; // This new object is an instance that refers to this existing resource.
+        audio.paused = false;
+        audio.currentPosition = 0;
+        // Make our instance look similar to the instance of a <media> to make api simple.
+        audio.play = function() { SDL.playWebAudio(this); }
+        audio.pause = function() { SDL.pauseWebAudio(this); }
+      } else {
+        // We clone the audio node to utilize the preloaded audio buffer, since
+        // the browser has already preloaded the audio file.
+        audio = info.audio.cloneNode(true);
+        audio.numChannels = info.audio.numChannels;
+        audio.frequency = info.audio.frequency;
+      }
+      audio['onended'] = function SDL_audio_onended() { // TODO: cache these
+        if (channelInfo.audio == this) { channelInfo.audio.paused = true; channelInfo.audio = null; }
+        if (SDL.channelFinished) Runtime.getFuncWrapper(SDL.channelFinished, 'vi')(channel);
+      }
+      channelInfo.audio = audio;
+      // TODO: handle N loops. Behavior matches Mix_PlayMusic
+      audio.loop = loops != 0;
+      audio.volume = channelInfo.volume;
+      audio.play();
+      return channel;
+    }function _SDL_PauseAudio(pauseOn) {
+      if (!SDL.audio) {
+        return;
+      }
+      if (pauseOn) {
+        if (SDL.audio.timer !== undefined) {
+          clearTimeout(SDL.audio.timer);
+          SDL.audio.numAudioTimersPending = 0;
+          SDL.audio.timer = undefined;
+        }
+      } else if (!SDL.audio.timer) {
+        // Start the audio playback timer callback loop.
+        SDL.audio.numAudioTimersPending = 1;
+        SDL.audio.timer = Browser.safeSetTimeout(SDL.audio.caller, 1);
+      }
+      SDL.audio.paused = pauseOn;
+    }function _SDL_CloseAudio() {
+      if (SDL.audio) {
+        _SDL_PauseAudio(1);
+        _free(SDL.audio.buffer);
+        SDL.audio = null;
+        SDL.allocateChannels(0);
+      }
+    }function _SDL_LockSurface(surf) {
+      var surfData = SDL.surfaces[surf];
+  
+      surfData.locked++;
+      if (surfData.locked > 1) return 0;
+  
+      if (!surfData.buffer) {
+        surfData.buffer = _malloc(surfData.width * surfData.height * 4);
+        HEAP32[(((surf)+(20))>>2)]=surfData.buffer;
+      }
+  
+      // Mark in C/C++-accessible SDL structure
+      // SDL_Surface has the following fields: Uint32 flags, SDL_PixelFormat *format; int w, h; Uint16 pitch; void *pixels; ...
+      // So we have fields all of the same size, and 5 of them before us.
+      // TODO: Use macros like in library.js
+      HEAP32[(((surf)+(20))>>2)]=surfData.buffer;
+  
+      if (surf == SDL.screen && Module.screenIsReadOnly && surfData.image) return 0;
+  
+      if (SDL.defaults.discardOnLock) {
+        if (!surfData.image) {
+          surfData.image = surfData.ctx.createImageData(surfData.width, surfData.height);
+        }
+        if (!SDL.defaults.opaqueFrontBuffer) return;
+      } else {
+        surfData.image = surfData.ctx.getImageData(0, 0, surfData.width, surfData.height);
+      }
+  
+      // Emulate desktop behavior and kill alpha values on the locked surface. (very costly!) Set SDL.defaults.opaqueFrontBuffer = false
+      // if you don't want this.
+      if (surf == SDL.screen && SDL.defaults.opaqueFrontBuffer) {
+        var data = surfData.image.data;
+        var num = data.length;
+        for (var i = 0; i < num/4; i++) {
+          data[i*4+3] = 255; // opacity, as canvases blend alpha
+        }
+      }
+  
+      if (SDL.defaults.copyOnLock && !SDL.defaults.discardOnLock) {
+        // Copy pixel data to somewhere accessible to 'C/C++'
+        if (surfData.isFlagSet(0x00200000 /* SDL_HWPALETTE */)) {
+          // If this is neaded then
+          // we should compact the data from 32bpp to 8bpp index.
+          // I think best way to implement this is use
+          // additional colorMap hash (color->index).
+          // Something like this:
+          //
+          // var size = surfData.width * surfData.height;
+          // var data = '';
+          // for (var i = 0; i<size; i++) {
+          //   var color = SDL.translateRGBAToColor(
+          //     surfData.image.data[i*4   ], 
+          //     surfData.image.data[i*4 +1], 
+          //     surfData.image.data[i*4 +2], 
+          //     255);
+          //   var index = surfData.colorMap[color];
+          //   HEAP8[(((surfData.buffer)+(i))>>0)]=index;
+          // }
+          throw 'CopyOnLock is not supported for SDL_LockSurface with SDL_HWPALETTE flag set' + new Error().stack;
+        } else {
+          HEAPU8.set(surfData.image.data, surfData.buffer);
+        }
+      }
+  
+      return 0;
+    }
+  
+  function _SDL_FreeRW(rwopsID) {
+      SDL.rwops[rwopsID] = null;
+      while (SDL.rwops.length > 0 && SDL.rwops[SDL.rwops.length-1] === null) {
+        SDL.rwops.pop();
+      }
+    }function _IMG_Load_RW(rwopsID, freeSrc) {
+      try {
+        // stb_image integration support
+        function cleanup() {
+          if (rwops && freeSrc) _SDL_FreeRW(rwopsID);
+        };
+        function addCleanup(func) {
+          var old = cleanup;
+          cleanup = function added_cleanup() {
+            old();
+            func();
+          }
+        }
+        function callStbImage(func, params) {
+          var x = Module['_malloc'](4);
+          var y = Module['_malloc'](4);
+          var comp = Module['_malloc'](4);
+          addCleanup(function() {
+            Module['_free'](x);
+            Module['_free'](y);
+            Module['_free'](comp);
+            if (data) Module['_stbi_image_free'](data);
+          });
+          var data = Module['_' + func].apply(null, params.concat([x, y, comp, 0]));
+          if (!data) return null;
+          return {
+            rawData: true,
+            data: data,
+            width: HEAP32[((x)>>2)],
+            height: HEAP32[((y)>>2)],
+            size: HEAP32[((x)>>2)] * HEAP32[((y)>>2)] * HEAP32[((comp)>>2)],
+            bpp: HEAP32[((comp)>>2)]
+          };
+        }
+  
+        var rwops = SDL.rwops[rwopsID];
+        if (rwops === undefined) {
+          return 0;
+        }
+  
+        var filename = rwops.filename;
+        if (filename === undefined) {
+          Runtime.warnOnce('Only file names that have been preloaded are supported for IMG_Load_RW. Consider using STB_IMAGE=1 if you want synchronous image decoding (see settings.js), or package files with --use-preload-plugins');
+          return 0;
+        }
+  
+        if (!raw) {
+          filename = PATH.resolve(filename);
+          var raw = Module["preloadedImages"][filename];
+          if (!raw) {
+            if (raw === null) Module.printErr('Trying to reuse preloaded image, but freePreloadedMediaOnUse is set!');
+            Runtime.warnOnce('Cannot find preloaded image ' + filename);
+            Runtime.warnOnce('Cannot find preloaded image ' + filename + '. Consider using STB_IMAGE=1 if you want synchronous image decoding (see settings.js), or package files with --use-preload-plugins');
+            return 0;
+          } else if (Module['freePreloadedMediaOnUse']) {
+            Module["preloadedImages"][filename] = null;
+          }
+        }
+  
+        var surf = SDL.makeSurface(raw.width, raw.height, 0, false, 'load:' + filename);
+        var surfData = SDL.surfaces[surf];
+        surfData.ctx.globalCompositeOperation = "copy";
+        if (!raw.rawData) {
+          surfData.ctx.drawImage(raw, 0, 0, raw.width, raw.height, 0, 0, raw.width, raw.height);
+        } else {
+          var imageData = surfData.ctx.getImageData(0, 0, surfData.width, surfData.height);
+          if (raw.bpp == 4) {
+            // rgba
+            imageData.data.set(HEAPU8.subarray((raw.data),(raw.data+raw.size)));
+          } else if (raw.bpp == 3) {
+            // rgb
+            var pixels = raw.size/3;
+            var data = imageData.data;
+            var sourcePtr = raw.data;
+            var destPtr = 0;
+            for (var i = 0; i < pixels; i++) {
+              data[destPtr++] = HEAPU8[((sourcePtr++)>>0)];
+              data[destPtr++] = HEAPU8[((sourcePtr++)>>0)];
+              data[destPtr++] = HEAPU8[((sourcePtr++)>>0)];
+              data[destPtr++] = 255;
+            }
+          } else if (raw.bpp == 1) {
+            // grayscale
+            var pixels = raw.size;
+            var data = imageData.data;
+            var sourcePtr = raw.data;
+            var destPtr = 0;
+            for (var i = 0; i < pixels; i++) {
+              var value = HEAPU8[((sourcePtr++)>>0)];
+              data[destPtr++] = value;
+              data[destPtr++] = value;
+              data[destPtr++] = value;
+              data[destPtr++] = 255;
+            }
+          } else {
+            Module.printErr('cannot handle bpp ' + raw.bpp);
+            return 0;
+          }
+          surfData.ctx.putImageData(imageData, 0, 0);
+        }
+        surfData.ctx.globalCompositeOperation = "source-over";
+        // XXX SDL does not specify that loaded images must have available pixel data, in fact
+        //     there are cases where you just want to blit them, so you just need the hardware
+        //     accelerated version. However, code everywhere seems to assume that the pixels
+        //     are in fact available, so we retrieve it here. This does add overhead though.
+        _SDL_LockSurface(surf);
+        surfData.locked--; // The surface is not actually locked in this hack
+        if (SDL.GL) {
+          // After getting the pixel data, we can free the canvas and context if we do not need to do 2D canvas blitting
+          surfData.canvas = surfData.ctx = null;
+        }
+        return surf;
+      } finally {
+        cleanup();
+      }
+    }
+  
+  function _SDL_RWFromFile(_name, mode) {
+      var id = SDL.rwops.length; // TODO: recycle ids when they are null
+      var name = Pointer_stringify(_name)
+      SDL.rwops.push({ filename: name, mimetype: Browser.getMimetype(name) });
+      return id;
+    }function _IMG_Load(filename){
+      var rwops = _SDL_RWFromFile(filename);
+      var result = _IMG_Load_RW(rwops, 1);
+      return result;
+    }function _SDL_UpperBlitScaled(src, srcrect, dst, dstrect) {
+      return SDL.blitSurface(src, srcrect, dst, dstrect, true);
+    }function _SDL_UpperBlit(src, srcrect, dst, dstrect) {
+      return SDL.blitSurface(src, srcrect, dst, dstrect, false);
+    }function _SDL_GetTicks() {
+      return (Date.now() - SDL.startTime)|0;
+    }var SDL={defaults:{width:320,height:200,copyOnLock:true,discardOnLock:false,opaqueFrontBuffer:true},version:null,surfaces:{},canvasPool:[],events:[],fonts:[null],audios:[null],rwops:[null],music:{audio:null,volume:1},mixerFrequency:22050,mixerFormat:32784,mixerNumChannels:2,mixerChunkSize:1024,channelMinimumNumber:0,GL:false,glAttributes:{0:3,1:3,2:2,3:0,4:0,5:1,6:16,7:0,8:0,9:0,10:0,11:0,12:0,13:0,14:0,15:1,16:0,17:0,18:0},keyboardState:null,keyboardMap:{},canRequestFullscreen:false,isRequestingFullscreen:false,textInput:false,startTime:null,initFlags:0,buttonState:0,modState:0,DOMButtons:[0,0,0],DOMEventToSDLEvent:{},TOUCH_DEFAULT_ID:0,eventHandler:null,eventHandlerContext:null,eventHandlerTemp:0,keyCodes:{16:1249,17:1248,18:1250,20:1081,33:1099,34:1102,35:1101,36:1098,37:1104,38:1106,39:1103,40:1105,44:316,45:1097,46:127,91:1251,93:1125,96:1122,97:1113,98:1114,99:1115,100:1116,101:1117,102:1118,103:1119,104:1120,105:1121,106:1109,107:1111,109:1110,110:1123,111:1108,112:1082,113:1083,114:1084,115:1085,116:1086,117:1087,118:1088,119:1089,120:1090,121:1091,122:1092,123:1093,124:1128,125:1129,126:1130,127:1131,128:1132,129:1133,130:1134,131:1135,132:1136,133:1137,134:1138,135:1139,144:1107,160:94,161:33,162:34,163:35,164:36,165:37,166:38,167:95,168:40,169:41,170:42,171:43,172:124,173:45,174:123,175:125,176:126,181:127,182:129,183:128,188:44,190:46,191:47,192:96,219:91,220:92,221:93,222:39,224:1251},scanCodes:{8:42,9:43,13:40,27:41,32:44,35:204,39:53,44:54,46:55,47:56,48:39,49:30,50:31,51:32,52:33,53:34,54:35,55:36,56:37,57:38,58:203,59:51,61:46,91:47,92:49,93:48,96:52,97:4,98:5,99:6,100:7,101:8,102:9,103:10,104:11,105:12,106:13,107:14,108:15,109:16,110:17,111:18,112:19,113:20,114:21,115:22,116:23,117:24,118:25,119:26,120:27,121:28,122:29,127:76,305:224,308:226,316:70},loadRect:function (rect) {
+        return {
+          x: HEAP32[((rect + 0)>>2)],
+          y: HEAP32[((rect + 4)>>2)],
+          w: HEAP32[((rect + 8)>>2)],
+          h: HEAP32[((rect + 12)>>2)]
+        };
+      },updateRect:function (rect, r) {
+        HEAP32[((rect)>>2)]=r.x;
+        HEAP32[(((rect)+(4))>>2)]=r.y;
+        HEAP32[(((rect)+(8))>>2)]=r.w;
+        HEAP32[(((rect)+(12))>>2)]=r.h;
+      },intersectionOfRects:function (first, second) {
+        var leftX = Math.max(first.x, second.x);
+        var leftY = Math.max(first.y, second.y);
+        var rightX = Math.min(first.x + first.w, second.x + second.w);
+        var rightY = Math.min(first.y + first.h, second.y + second.h);
+  
+        return {
+          x: leftX,
+          y: leftY,
+          w: Math.max(leftX, rightX) - leftX,
+          h: Math.max(leftY, rightY) - leftY
+        }
+      },checkPixelFormat:function (fmt) {
+        // Canvas screens are always RGBA.
+        var format = HEAP32[((fmt)>>2)];
+        if (format != -2042224636) {
+          Runtime.warnOnce('Unsupported pixel format!');
+        }
+      },loadColorToCSSRGB:function (color) {
+        var rgba = HEAP32[((color)>>2)];
+        return 'rgb(' + (rgba&255) + ',' + ((rgba >> 8)&255) + ',' + ((rgba >> 16)&255) + ')';
+      },loadColorToCSSRGBA:function (color) {
+        var rgba = HEAP32[((color)>>2)];
+        return 'rgba(' + (rgba&255) + ',' + ((rgba >> 8)&255) + ',' + ((rgba >> 16)&255) + ',' + (((rgba >> 24)&255)/255) + ')';
+      },translateColorToCSSRGBA:function (rgba) {
+        return 'rgba(' + (rgba&0xff) + ',' + (rgba>>8 & 0xff) + ',' + (rgba>>16 & 0xff) + ',' + (rgba>>>24)/0xff + ')';
+      },translateRGBAToCSSRGBA:function (r, g, b, a) {
+        return 'rgba(' + (r&0xff) + ',' + (g&0xff) + ',' + (b&0xff) + ',' + (a&0xff)/255 + ')';
+      },translateRGBAToColor:function (r, g, b, a) {
+        return r | g << 8 | b << 16 | a << 24;
+      },makeSurface:function (width, height, flags, usePageCanvas, source, rmask, gmask, bmask, amask) {
+        flags = flags || 0;
+        var is_SDL_HWSURFACE = flags & 0x00000001;
+        var is_SDL_HWPALETTE = flags & 0x00200000;
+        var is_SDL_OPENGL = flags & 0x04000000;
+  
+        var surf = _malloc(60);
+        var pixelFormat = _malloc(44);
+        //surface with SDL_HWPALETTE flag is 8bpp surface (1 byte)
+        var bpp = is_SDL_HWPALETTE ? 1 : 4;
+        var buffer = 0;
+  
+        // preemptively initialize this for software surfaces,
+        // otherwise it will be lazily initialized inside of SDL_LockSurface
+        if (!is_SDL_HWSURFACE && !is_SDL_OPENGL) {
+          buffer = _malloc(width * height * 4);
+        }
+  
+        HEAP32[((surf)>>2)]=flags;
+        HEAP32[(((surf)+(4))>>2)]=pixelFormat;
+        HEAP32[(((surf)+(8))>>2)]=width;
+        HEAP32[(((surf)+(12))>>2)]=height;
+        HEAP32[(((surf)+(16))>>2)]=width * bpp;  // assuming RGBA or indexed for now,
+                                                                                          // since that is what ImageData gives us in browsers
+        HEAP32[(((surf)+(20))>>2)]=buffer;
+  
+        HEAP32[(((surf)+(36))>>2)]=0;
+        HEAP32[(((surf)+(40))>>2)]=0;
+        HEAP32[(((surf)+(44))>>2)]=Module["canvas"].width;
+        HEAP32[(((surf)+(48))>>2)]=Module["canvas"].height;
+  
+        HEAP32[(((surf)+(56))>>2)]=1;
+  
+        HEAP32[((pixelFormat)>>2)]=-2042224636;
+        HEAP32[(((pixelFormat)+(4))>>2)]=0;// TODO
+        HEAP8[(((pixelFormat)+(8))>>0)]=bpp * 8;
+        HEAP8[(((pixelFormat)+(9))>>0)]=bpp;
+  
+        HEAP32[(((pixelFormat)+(12))>>2)]=rmask || 0x000000ff;
+        HEAP32[(((pixelFormat)+(16))>>2)]=gmask || 0x0000ff00;
+        HEAP32[(((pixelFormat)+(20))>>2)]=bmask || 0x00ff0000;
+        HEAP32[(((pixelFormat)+(24))>>2)]=amask || 0xff000000;
+  
+        // Decide if we want to use WebGL or not
+        SDL.GL = SDL.GL || is_SDL_OPENGL;
+        var canvas;
+        if (!usePageCanvas) {
+          if (SDL.canvasPool.length > 0) {
+            canvas = SDL.canvasPool.pop();
+          } else {
+            canvas = document.createElement('canvas');
+          }
+          canvas.width = width;
+          canvas.height = height;
+        } else {
+          canvas = Module['canvas'];
+        }
+  
+        var webGLContextAttributes = {
+          antialias: ((SDL.glAttributes[13 /*SDL_GL_MULTISAMPLEBUFFERS*/] != 0) && (SDL.glAttributes[14 /*SDL_GL_MULTISAMPLESAMPLES*/] > 1)),
+          depth: (SDL.glAttributes[6 /*SDL_GL_DEPTH_SIZE*/] > 0),
+          stencil: (SDL.glAttributes[7 /*SDL_GL_STENCIL_SIZE*/] > 0),
+          alpha: (SDL.glAttributes[3 /*SDL_GL_ALPHA_SIZE*/] > 0)
+        };
+        
+        var ctx = Browser.createContext(canvas, is_SDL_OPENGL, usePageCanvas, webGLContextAttributes);
+              
+        SDL.surfaces[surf] = {
+          width: width,
+          height: height,
+          canvas: canvas,
+          ctx: ctx,
+          surf: surf,
+          buffer: buffer,
+          pixelFormat: pixelFormat,
+          alpha: 255,
+          flags: flags,
+          locked: 0,
+          usePageCanvas: usePageCanvas,
+          source: source,
+  
+          isFlagSet: function(flag) {
+            return flags & flag;
+          }
+        };
+  
+        return surf;
+      },copyIndexedColorData:function (surfData, rX, rY, rW, rH) {
+        // HWPALETTE works with palette
+        // setted by SDL_SetColors
+        if (!surfData.colors) {
+          return;
+        }
+        
+        var fullWidth  = Module['canvas'].width;
+        var fullHeight = Module['canvas'].height;
+  
+        var startX  = rX || 0;
+        var startY  = rY || 0;
+        var endX    = (rW || (fullWidth - startX)) + startX;
+        var endY    = (rH || (fullHeight - startY)) + startY;
+        
+        var buffer  = surfData.buffer;
+  
+        if (!surfData.image.data32) {
+          surfData.image.data32 = new Uint32Array(surfData.image.data.buffer);
+        }
+        var data32   = surfData.image.data32;
+  
+        var colors32 = surfData.colors32;
+  
+        for (var y = startY; y < endY; ++y) {
+          var base = y * fullWidth;
+          for (var x = startX; x < endX; ++x) {
+            data32[base + x] = colors32[HEAPU8[((buffer + base + x)>>0)]];
+          }
+        }
+      },freeSurface:function (surf) {
+        var refcountPointer = surf + 56;
+        var refcount = HEAP32[((refcountPointer)>>2)];
+        if (refcount > 1) {
+          HEAP32[((refcountPointer)>>2)]=refcount - 1;
+          return;
+        }
+  
+        var info = SDL.surfaces[surf];
+        if (!info.usePageCanvas && info.canvas) SDL.canvasPool.push(info.canvas);
+        if (info.buffer) _free(info.buffer);
+        _free(info.pixelFormat);
+        _free(surf);
+        SDL.surfaces[surf] = null;
+  
+        if (surf === SDL.screen) {
+          SDL.screen = null;
+        }
+      },blitSurface__deps:["SDL_LockSurface"],blitSurface:function (src, srcrect, dst, dstrect, scale) {
+        var srcData = SDL.surfaces[src];
+        var dstData = SDL.surfaces[dst];
+        var sr, dr;
+        if (srcrect) {
+          sr = SDL.loadRect(srcrect);
+        } else {
+          sr = { x: 0, y: 0, w: srcData.width, h: srcData.height };
+        }
+        if (dstrect) {
+          dr = SDL.loadRect(dstrect);
+        } else {
+          dr = { x: 0, y: 0, w: srcData.width, h: srcData.height };
+        }
+        if (dstData.clipRect) {
+          var widthScale = (!scale || sr.w === 0) ? 1 : sr.w / dr.w;
+          var heightScale = (!scale || sr.h === 0) ? 1 : sr.h / dr.h;
+          
+          dr = SDL.intersectionOfRects(dstData.clipRect, dr);
+          
+          sr.w = dr.w * widthScale;
+          sr.h = dr.h * heightScale;
+          
+          if (dstrect) {
+            SDL.updateRect(dstrect, dr);
+          }
+        }
+        var blitw, blith;
+        if (scale) {
+          blitw = dr.w; blith = dr.h;
+        } else {
+          blitw = sr.w; blith = sr.h;
+        }
+        if (sr.w === 0 || sr.h === 0 || blitw === 0 || blith === 0) {
+          return 0;
+        }
+        var oldAlpha = dstData.ctx.globalAlpha;
+        dstData.ctx.globalAlpha = srcData.alpha/255;
+        dstData.ctx.drawImage(srcData.canvas, sr.x, sr.y, sr.w, sr.h, dr.x, dr.y, blitw, blith);
+        dstData.ctx.globalAlpha = oldAlpha;
+        if (dst != SDL.screen) {
+          // XXX As in IMG_Load, for compatibility we write out |pixels|
+          Runtime.warnOnce('WARNING: copying canvas data to memory for compatibility');
+          _SDL_LockSurface(dst);
+          dstData.locked--; // The surface is not actually locked in this hack
+        }
+        return 0;
+      },downFingers:{},savedKeydown:null,receiveEvent:function (event) {
+        function unpressAllPressedKeys() {
+          // Un-press all pressed keys: TODO
+          for (var code in SDL.keyboardMap) {
+            SDL.events.push({
+              type: 'keyup',
+              keyCode: SDL.keyboardMap[code]
+            });
+          }
+        };
+        switch(event.type) {
+          case 'touchstart': case 'touchmove': {
+            event.preventDefault();
+  
+            var touches = [];
+            
+            // Clear out any touchstart events that we've already processed
+            if (event.type === 'touchstart') {
+              for (var i = 0; i < event.touches.length; i++) {
+                var touch = event.touches[i];
+                if (SDL.downFingers[touch.identifier] != true) {
+                  SDL.downFingers[touch.identifier] = true;
+                  touches.push(touch);
+                }
+              }
+            } else {
+              touches = event.touches;
+            }
+            
+            var firstTouch = touches[0];
+            if (event.type == 'touchstart') {
+              SDL.DOMButtons[0] = 1;
+            }
+            var mouseEventType;
+            switch(event.type) {
+              case 'touchstart': mouseEventType = 'mousedown'; break;
+              case 'touchmove': mouseEventType = 'mousemove'; break;
+            }
+            var mouseEvent = {
+              type: mouseEventType,
+              button: 0,
+              pageX: firstTouch.clientX,
+              pageY: firstTouch.clientY
+            };
+            SDL.events.push(mouseEvent);
+  
+            for (var i = 0; i < touches.length; i++) {
+              var touch = touches[i];
+              SDL.events.push({
+                type: event.type,
+                touch: touch
+              });
+            };
+            break;
+          }
+          case 'touchend': {
+            event.preventDefault();
+            
+            // Remove the entry in the SDL.downFingers hash
+            // because the finger is no longer down.
+            for(var i = 0; i < event.changedTouches.length; i++) {
+              var touch = event.changedTouches[i];
+              if (SDL.downFingers[touch.identifier] === true) {
+                delete SDL.downFingers[touch.identifier];
+              }
+            }
+  
+            var mouseEvent = {
+              type: 'mouseup',
+              button: 0,
+              pageX: event.changedTouches[0].clientX,
+              pageY: event.changedTouches[0].clientY
+            };
+            SDL.DOMButtons[0] = 0;
+            SDL.events.push(mouseEvent);
+            
+            for (var i = 0; i < event.changedTouches.length; i++) {
+              var touch = event.changedTouches[i];
+              SDL.events.push({
+                type: 'touchend',
+                touch: touch
+              });
+            };
+            break;
+          }
+          case 'DOMMouseScroll': case 'mousewheel': case 'wheel':
+            var delta = -Browser.getMouseWheelDelta(event); // Flip the wheel direction to translate from browser wheel direction (+:down) to SDL direction (+:up)
+            delta = (delta == 0) ? 0 : (delta > 0 ? Math.max(delta, 1) : Math.min(delta, -1)); // Quantize to integer so that minimum scroll is at least +/- 1.
+  
+            // Simulate old-style SDL events representing mouse wheel input as buttons
+            var button = delta > 0 ? 3 /*SDL_BUTTON_WHEELUP-1*/ : 4 /*SDL_BUTTON_WHEELDOWN-1*/; // Subtract one since JS->C marshalling is defined to add one back.
+            SDL.events.push({ type: 'mousedown', button: button, pageX: event.pageX, pageY: event.pageY });
+            SDL.events.push({ type: 'mouseup', button: button, pageX: event.pageX, pageY: event.pageY });
+  
+            // Pass a delta motion event.
+            SDL.events.push({ type: 'wheel', deltaX: 0, deltaY: delta });
+            event.preventDefault(); // If we don't prevent this, then 'wheel' event will be sent again by the browser as 'DOMMouseScroll' and we will receive this same event the second time.
+            break;
+          case 'mousemove':
+            if (SDL.DOMButtons[0] === 1) {
+              SDL.events.push({
+                type: 'touchmove',
+                touch: {
+                  identifier: 0,
+                  deviceID: -1,
+                  pageX: event.pageX,
+                  pageY: event.pageY
+                }
+              });
+            }
+            if (Browser.pointerLock) {
+              // workaround for firefox bug 750111
+              if ('mozMovementX' in event) {
+                event['movementX'] = event['mozMovementX'];
+                event['movementY'] = event['mozMovementY'];
+              }
+              // workaround for Firefox bug 782777
+              if (event['movementX'] == 0 && event['movementY'] == 0) {
+                // ignore a mousemove event if it doesn't contain any movement info
+                // (without pointer lock, we infer movement from pageX/pageY, so this check is unnecessary)
+                event.preventDefault();
+                return;
+              }
+            }
+            // fall through
+          case 'keydown': case 'keyup': case 'keypress': case 'mousedown': case 'mouseup':
+            // If we preventDefault on keydown events, the subsequent keypress events
+            // won't fire. However, it's fine (and in some cases necessary) to
+            // preventDefault for keys that don't generate a character. Otherwise,
+            // preventDefault is the right thing to do in general.
+            if (event.type !== 'keydown' || (!SDL.unicode && !SDL.textInput) || (event.keyCode === 8 /* backspace */ || event.keyCode === 9 /* tab */)) {
+              event.preventDefault();
+            }
+  
+            if (event.type == 'mousedown') {
+              SDL.DOMButtons[event.button] = 1;
+              SDL.events.push({
+                type: 'touchstart',
+                touch: {
+                  identifier: 0,
+                  deviceID: -1,
+                  pageX: event.pageX,
+                  pageY: event.pageY
+                }
+              });
+            } else if (event.type == 'mouseup') {
+              // ignore extra ups, can happen if we leave the canvas while pressing down, then return,
+              // since we add a mouseup in that case
+              if (!SDL.DOMButtons[event.button]) {
+                return;
+              }
+  
+              SDL.events.push({
+                type: 'touchend',
+                touch: {
+                  identifier: 0,
+                  deviceID: -1,
+                  pageX: event.pageX,
+                  pageY: event.pageY
+                }
+              });
+              SDL.DOMButtons[event.button] = 0;
+            }
+  
+            // We can only request fullscreen as the result of user input.
+            // Due to this limitation, we toggle a boolean on keydown which
+            // SDL_WM_ToggleFullScreen will check and subsequently set another
+            // flag indicating for us to request fullscreen on the following
+            // keyup. This isn't perfect, but it enables SDL_WM_ToggleFullScreen
+            // to work as the result of a keypress (which is an extremely
+            // common use case).
+            if (event.type === 'keydown' || event.type === 'mousedown') {
+              SDL.canRequestFullscreen = true;
+            } else if (event.type === 'keyup' || event.type === 'mouseup') {
+              if (SDL.isRequestingFullscreen) {
+                Module['requestFullscreen'](/*lockPointer=*/true, /*resizeCanvas=*/true);
+                SDL.isRequestingFullscreen = false;
+              }
+              SDL.canRequestFullscreen = false;
+            }
+  
+            // SDL expects a unicode character to be passed to its keydown events.
+            // Unfortunately, the browser APIs only provide a charCode property on
+            // keypress events, so we must backfill in keydown events with their
+            // subsequent keypress event's charCode.
+            if (event.type === 'keypress' && SDL.savedKeydown) {
+              // charCode is read-only
+              SDL.savedKeydown.keypressCharCode = event.charCode;
+              SDL.savedKeydown = null;
+            } else if (event.type === 'keydown') {
+              SDL.savedKeydown = event;
+            }
+  
+            // Don't push keypress events unless SDL_StartTextInput has been called.
+            if (event.type !== 'keypress' || SDL.textInput) {
+              SDL.events.push(event);
+            }
+            break;
+          case 'mouseout':
+            // Un-press all pressed mouse buttons, because we might miss the release outside of the canvas
+            for (var i = 0; i < 3; i++) {
+              if (SDL.DOMButtons[i]) {
+                SDL.events.push({
+                  type: 'mouseup',
+                  button: i,
+                  pageX: event.pageX,
+                  pageY: event.pageY
+                });
+                SDL.DOMButtons[i] = 0;
+              }
+            }
+            event.preventDefault();
+            break;
+          case 'focus':
+            SDL.events.push(event);
+            event.preventDefault();
+            break;
+          case 'blur':
+            SDL.events.push(event);
+            unpressAllPressedKeys();
+            event.preventDefault();
+            break;
+          case 'visibilitychange':
+            SDL.events.push({
+              type: 'visibilitychange',
+              visible: !document.hidden
+            });
+            unpressAllPressedKeys();
+            event.preventDefault();
+            break;
+          case 'unload':
+            if (Browser.mainLoop.runner) {
+              SDL.events.push(event);
+              // Force-run a main event loop, since otherwise this event will never be caught!
+              Browser.mainLoop.runner();
+            }
+            return;
+          case 'resize':
+            SDL.events.push(event);
+            // manually triggered resize event doesn't have a preventDefault member
+            if (event.preventDefault) {
+              event.preventDefault();
+            }
+            break;
+        }
+        if (SDL.events.length >= 10000) {
+          Module.printErr('SDL event queue full, dropping events');
+          SDL.events = SDL.events.slice(0, 10000);
+        }
+        // If we have a handler installed, this will push the events to the app
+        // instead of the app polling for them.
+        SDL.flushEventsToHandler();
+        return;
+      },lookupKeyCodeForEvent:function (event) {
+          var code = event.keyCode;
+          if (code >= 65 && code <= 90) {
+            code += 32; // make lowercase for SDL
+          } else {
+            code = SDL.keyCodes[event.keyCode] || event.keyCode;
+            // If this is one of the modifier keys (224 | 1<<10 - 227 | 1<<10), and the event specifies that it is
+            // a right key, add 4 to get the right key SDL key code.
+            if (event.location === KeyboardEvent.DOM_KEY_LOCATION_RIGHT && code >= (224 | 1<<10) && code <= (227 | 1<<10)) {
+              code += 4;
+            }
+          }
+          return code;
+      },handleEvent:function (event) {
+        if (event.handled) return;
+        event.handled = true;
+  
+        switch (event.type) {
+          case 'touchstart': case 'touchend': case 'touchmove': {
+            Browser.calculateMouseEvent(event);
+            break;
+          }
+          case 'keydown': case 'keyup': {
+            var down = event.type === 'keydown';
+            var code = SDL.lookupKeyCodeForEvent(event);
+            HEAP8[(((SDL.keyboardState)+(code))>>0)]=down;
+            // TODO: lmeta, rmeta, numlock, capslock, KMOD_MODE, KMOD_RESERVED
+            SDL.modState = (HEAP8[(((SDL.keyboardState)+(1248))>>0)] ? 0x0040 : 0) | // KMOD_LCTRL
+              (HEAP8[(((SDL.keyboardState)+(1249))>>0)] ? 0x0001 : 0) | // KMOD_LSHIFT
+              (HEAP8[(((SDL.keyboardState)+(1250))>>0)] ? 0x0100 : 0) | // KMOD_LALT
+              (HEAP8[(((SDL.keyboardState)+(1252))>>0)] ? 0x0080 : 0) | // KMOD_RCTRL
+              (HEAP8[(((SDL.keyboardState)+(1253))>>0)] ? 0x0002 : 0) | // KMOD_RSHIFT
+              (HEAP8[(((SDL.keyboardState)+(1254))>>0)] ? 0x0200 : 0); //  KMOD_RALT
+            if (down) {
+              SDL.keyboardMap[code] = event.keyCode; // save the DOM input, which we can use to unpress it during blur
+            } else {
+              delete SDL.keyboardMap[code];
+            }
+  
+            break;
+          }
+          case 'mousedown': case 'mouseup':
+            if (event.type == 'mousedown') {
+              // SDL_BUTTON(x) is defined as (1 << ((x)-1)).  SDL buttons are 1-3,
+              // and DOM buttons are 0-2, so this means that the below formula is
+              // correct.
+              SDL.buttonState |= 1 << event.button;
+            } else if (event.type == 'mouseup') {
+              SDL.buttonState &= ~(1 << event.button);
+            }
+            // fall through
+          case 'mousemove': {
+            Browser.calculateMouseEvent(event);
+            break;
+          }
+        }
+      },flushEventsToHandler:function () {
+        if (!SDL.eventHandler) return;
+  
+        while (SDL.pollEvent(SDL.eventHandlerTemp)) {
+          Module['dynCall_iii'](SDL.eventHandler, SDL.eventHandlerContext, SDL.eventHandlerTemp);
+        }
+      },pollEvent:function (ptr) {
+        if (SDL.initFlags & 0x200 && SDL.joystickEventState) {
+          // If SDL_INIT_JOYSTICK was supplied AND the joystick system is configured
+          // to automatically query for events, query for joystick events.
+          SDL.queryJoysticks();
+        }
+        if (ptr) {
+          while (SDL.events.length > 0) {
+            if (SDL.makeCEvent(SDL.events.shift(), ptr) !== false) return 1;
+          }
+          return 0;
+        } else {
+          // XXX: somewhat risky in that we do not check if the event is real or not (makeCEvent returns false) if no pointer supplied
+          return SDL.events.length > 0;
+        }
+      },makeCEvent:function (event, ptr) {
+        if (typeof event === 'number') {
+          // This is a pointer to a copy of a native C event that was SDL_PushEvent'ed
+          _memcpy(ptr, event, 28);
+          _free(event); // the copy is no longer needed
+          return;
+        }
+  
+        SDL.handleEvent(event);
+  
+        switch (event.type) {
+          case 'keydown': case 'keyup': {
+            var down = event.type === 'keydown';
+            //Module.print('Received key event: ' + event.keyCode);
+            var key = SDL.lookupKeyCodeForEvent(event);
+            var scan;
+            if (key >= 1024) {
+              scan = key - 1024;
+            } else {
+              scan = SDL.scanCodes[key] || key;
+            }
+  
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP8[(((ptr)+(8))>>0)]=down ? 1 : 0;
+            HEAP8[(((ptr)+(9))>>0)]=0; // TODO
+            HEAP32[(((ptr)+(12))>>2)]=scan;
+            HEAP32[(((ptr)+(16))>>2)]=key;
+            HEAP16[(((ptr)+(20))>>1)]=SDL.modState;
+            // some non-character keys (e.g. backspace and tab) won't have keypressCharCode set, fill in with the keyCode.
+            HEAP32[(((ptr)+(24))>>2)]=event.keypressCharCode || key;
+  
+            break;
+          }
+          case 'keypress': {
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            // Not filling in windowID for now
+            var cStr = intArrayFromString(String.fromCharCode(event.charCode));
+            for (var i = 0; i < cStr.length; ++i) {
+              HEAP8[(((ptr)+(8 + i))>>0)]=cStr[i];
+            }
+            break;
+          }
+          case 'mousedown': case 'mouseup': case 'mousemove': {
+            if (event.type != 'mousemove') {
+              var down = event.type === 'mousedown';
+              HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+              HEAP32[(((ptr)+(4))>>2)]=0;
+              HEAP32[(((ptr)+(8))>>2)]=0;
+              HEAP32[(((ptr)+(12))>>2)]=0;
+              HEAP8[(((ptr)+(16))>>0)]=event.button+1; // DOM buttons are 0-2, SDL 1-3
+              HEAP8[(((ptr)+(17))>>0)]=down ? 1 : 0;
+              HEAP32[(((ptr)+(20))>>2)]=Browser.mouseX;
+              HEAP32[(((ptr)+(24))>>2)]=Browser.mouseY;
+            } else {
+              HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+              HEAP32[(((ptr)+(4))>>2)]=0;
+              HEAP32[(((ptr)+(8))>>2)]=0;
+              HEAP32[(((ptr)+(12))>>2)]=0;
+              HEAP32[(((ptr)+(16))>>2)]=SDL.buttonState;
+              HEAP32[(((ptr)+(20))>>2)]=Browser.mouseX;
+              HEAP32[(((ptr)+(24))>>2)]=Browser.mouseY;
+              HEAP32[(((ptr)+(28))>>2)]=Browser.mouseMovementX;
+              HEAP32[(((ptr)+(32))>>2)]=Browser.mouseMovementY;
+            }
+            break;
+          }
+          case 'wheel': {
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP32[(((ptr)+(16))>>2)]=event.deltaX;
+            HEAP32[(((ptr)+(20))>>2)]=event.deltaY; 
+            break;       
+          }
+          case 'touchstart': case 'touchend': case 'touchmove': {
+            var touch = event.touch;
+            if (!Browser.touches[touch.identifier]) break;
+            var w = Module['canvas'].width;
+            var h = Module['canvas'].height;
+            var x = Browser.touches[touch.identifier].x / w;
+            var y = Browser.touches[touch.identifier].y / h;
+            var lx = Browser.lastTouches[touch.identifier].x / w;
+            var ly = Browser.lastTouches[touch.identifier].y / h;
+            var dx = x - lx;
+            var dy = y - ly;
+            if (touch['deviceID'] === undefined) touch.deviceID = SDL.TOUCH_DEFAULT_ID;
+            if (dx === 0 && dy === 0 && event.type === 'touchmove') return false; // don't send these if nothing happened
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP32[(((ptr)+(4))>>2)]=_SDL_GetTicks();
+            (tempI64 = [touch.deviceID>>>0,(tempDouble=touch.deviceID,(+(Math_abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math_min((+(Math_floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math_ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((ptr)+(8))>>2)]=tempI64[0],HEAP32[(((ptr)+(12))>>2)]=tempI64[1]);
+            (tempI64 = [touch.identifier>>>0,(tempDouble=touch.identifier,(+(Math_abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math_min((+(Math_floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math_ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((ptr)+(16))>>2)]=tempI64[0],HEAP32[(((ptr)+(20))>>2)]=tempI64[1]);
+            HEAPF32[(((ptr)+(24))>>2)]=x;
+            HEAPF32[(((ptr)+(28))>>2)]=y;
+            HEAPF32[(((ptr)+(32))>>2)]=dx;
+            HEAPF32[(((ptr)+(36))>>2)]=dy;
+            if (touch.force !== undefined) {
+              HEAPF32[(((ptr)+(40))>>2)]=touch.force;
+            } else { // No pressure data, send a digital 0/1 pressure.
+              HEAPF32[(((ptr)+(40))>>2)]=event.type == "touchend" ? 0 : 1;
+            }
+            break;
+          }
+          case 'unload': {
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            break;
+          }
+          case 'resize': {
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP32[(((ptr)+(4))>>2)]=event.w;
+            HEAP32[(((ptr)+(8))>>2)]=event.h;
+            break;
+          }
+          case 'joystick_button_up': case 'joystick_button_down': {
+            var state = event.type === 'joystick_button_up' ? 0 : 1;
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP8[(((ptr)+(4))>>0)]=event.index;
+            HEAP8[(((ptr)+(5))>>0)]=event.button;
+            HEAP8[(((ptr)+(6))>>0)]=state;
+            break;
+          }
+          case 'joystick_axis_motion': {
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP8[(((ptr)+(4))>>0)]=event.index;
+            HEAP8[(((ptr)+(5))>>0)]=event.axis;
+            HEAP32[(((ptr)+(8))>>2)]=SDL.joystickAxisValueConversion(event.value);
+            break;
+          }
+          case 'focus': {
+            var SDL_WINDOWEVENT_FOCUS_GAINED = 12 /* SDL_WINDOWEVENT_FOCUS_GAINED */;
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP32[(((ptr)+(4))>>2)]=0;
+            HEAP8[(((ptr)+(8))>>0)]=SDL_WINDOWEVENT_FOCUS_GAINED;
+            break;
+          }
+          case 'blur': {
+            var SDL_WINDOWEVENT_FOCUS_LOST = 13 /* SDL_WINDOWEVENT_FOCUS_LOST */;
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP32[(((ptr)+(4))>>2)]=0;
+            HEAP8[(((ptr)+(8))>>0)]=SDL_WINDOWEVENT_FOCUS_LOST;
+            break;
+          }
+          case 'visibilitychange': {
+            var SDL_WINDOWEVENT_SHOWN  = 1 /* SDL_WINDOWEVENT_SHOWN */;
+            var SDL_WINDOWEVENT_HIDDEN = 2 /* SDL_WINDOWEVENT_HIDDEN */;
+            var visibilityEventID = event.visible ? SDL_WINDOWEVENT_SHOWN : SDL_WINDOWEVENT_HIDDEN;
+            HEAP32[((ptr)>>2)]=SDL.DOMEventToSDLEvent[event.type];
+            HEAP32[(((ptr)+(4))>>2)]=0;
+            HEAP8[(((ptr)+(8))>>0)]=visibilityEventID;
+            break;
+          }
+          default: throw 'Unhandled SDL event: ' + event.type;
+        }
+      },estimateTextWidth:function (fontData, text) {
+        var h = fontData.size;
+        var fontString = h + 'px ' + fontData.name;
+        var tempCtx = SDL.ttfContext;
+        assert(tempCtx, 'TTF_Init must have been called');
+        tempCtx.save();
+        tempCtx.font = fontString;
+        var ret = tempCtx.measureText(text).width | 0;
+        tempCtx.restore();
+        return ret;
+      },allocateChannels:function (num) { // called from Mix_AllocateChannels and init
+        if (SDL.numChannels && SDL.numChannels >= num && num != 0) return;
+        SDL.numChannels = num;
+        SDL.channels = [];
+        for (var i = 0; i < num; i++) {
+          SDL.channels[i] = {
+            audio: null,
+            volume: 1.0
+          };
+        }
+      },setGetVolume:function (info, volume) {
+        if (!info) return 0;
+        var ret = info.volume * 128; // MIX_MAX_VOLUME
+        if (volume != -1) {
+          info.volume = Math.min(Math.max(volume, 0), 128) / 128;
+          if (info.audio) {
+            try {
+              info.audio.volume = info.volume; // For <audio> element
+              if (info.audio.webAudioGainNode) info.audio.webAudioGainNode['gain']['value'] = info.volume; // For WebAudio playback
+            } catch(e) {
+              Module.printErr('setGetVolume failed to set audio volume: ' + e);
+            }
+          }
+        }
+        return ret;
+      },setPannerPosition:function (info, x, y, z) {
+        if (!info) return;
+        if (info.audio) {
+          if (info.audio.webAudioPannerNode) {
+            info.audio.webAudioPannerNode['setPosition'](x, y, z);
+          }
+        }
+      },playWebAudio:function (audio) {
+        if (!audio) return;
+        if (audio.webAudioNode) return; // This instance is already playing, don't start again.
+        if (!SDL.webAudioAvailable()) return;
+        try {
+          var webAudio = audio.resource.webAudio;
+          audio.paused = false;
+          if (!webAudio.decodedBuffer) {
+            if (webAudio.onDecodeComplete === undefined) abort("Cannot play back audio object that was not loaded");
+            webAudio.onDecodeComplete.push(function() { if (!audio.paused) SDL.playWebAudio(audio); });
+            return;
+          }
+          audio.webAudioNode = SDL.audioContext['createBufferSource']();
+          audio.webAudioNode['buffer'] = webAudio.decodedBuffer;
+          audio.webAudioNode['loop'] = audio.loop;
+          audio.webAudioNode['onended'] = function() { audio['onended'](); } // For <media> element compatibility, route the onended signal to the instance.
+  
+          audio.webAudioPannerNode = SDL.audioContext['createPanner']();
+          // avoid Chrome bug
+          // If posz = 0, the sound will come from only the right.
+          // By posz = -0.5 (slightly ahead), the sound will come from right and left correctly.
+          audio.webAudioPannerNode["setPosition"](0, 0, -.5);
+          audio.webAudioPannerNode['panningModel'] = 'equalpower';
+  
+          // Add an intermediate gain node to control volume.
+          audio.webAudioGainNode = SDL.audioContext['createGain']();
+          audio.webAudioGainNode['gain']['value'] = audio.volume;
+  
+          audio.webAudioNode['connect'](audio.webAudioPannerNode);
+          audio.webAudioPannerNode['connect'](audio.webAudioGainNode);
+          audio.webAudioGainNode['connect'](SDL.audioContext['destination']);
+  
+          audio.webAudioNode['start'](0, audio.currentPosition);
+          audio.startTime = SDL.audioContext['currentTime'] - audio.currentPosition;
+        } catch(e) {
+          Module.printErr('playWebAudio failed: ' + e);
+        }
+      },pauseWebAudio:function (audio) {
+        if (!audio) return;
+        if (audio.webAudioNode) {
+          try {
+            // Remember where we left off, so that if/when we resume, we can restart the playback at a proper place.
+            audio.currentPosition = (SDL.audioContext['currentTime'] - audio.startTime) % audio.resource.webAudio.decodedBuffer.duration;
+            // Important: When we reach here, the audio playback is stopped by the user. But when calling .stop() below, the Web Audio
+            // graph will send the onended signal, but we don't want to process that, since pausing should not clear/destroy the audio
+            // channel.
+            audio.webAudioNode['onended'] = undefined;
+            audio.webAudioNode.stop(0); // 0 is a default parameter, but WebKit is confused by it #3861
+            audio.webAudioNode = undefined;
+          } catch(e) {
+            Module.printErr('pauseWebAudio failed: ' + e);
+          }
+        }
+        audio.paused = true;
+      },openAudioContext:function () {
+        // Initialize Web Audio API if we haven't done so yet. Note: Only initialize Web Audio context ever once on the web page,
+        // since initializing multiple times fails on Chrome saying 'audio resources have been exhausted'.
+        if (!SDL.audioContext) {
+          if (typeof(AudioContext) !== 'undefined') SDL.audioContext = new AudioContext();
+          else if (typeof(webkitAudioContext) !== 'undefined') SDL.audioContext = new webkitAudioContext();
+        }
+      },webAudioAvailable:function () { return !!SDL.audioContext; },fillWebAudioBufferFromHeap:function (heapPtr, sizeSamplesPerChannel, dstAudioBuffer) {
+        // The input audio data is interleaved across the channels, i.e. [L, R, L, R, L, R, ...] and is either 8-bit or 16-bit as
+        // supported by the SDL API. The output audio wave data for Web Audio API must be in planar buffers of [-1,1]-normalized Float32 data,
+        // so perform a buffer conversion for the data.
+        var numChannels = SDL.audio.channels;
+        for(var c = 0; c < numChannels; ++c) {
+          var channelData = dstAudioBuffer['getChannelData'](c);
+          if (channelData.length != sizeSamplesPerChannel) {
+            throw 'Web Audio output buffer length mismatch! Destination size: ' + channelData.length + ' samples vs expected ' + sizeSamplesPerChannel + ' samples!';
+          }
+          if (SDL.audio.format == 0x8010 /*AUDIO_S16LSB*/) {
+            for(var j = 0; j < sizeSamplesPerChannel; ++j) {
+              channelData[j] = (HEAP16[(((heapPtr)+((j*numChannels + c)*2))>>1)]) / 0x8000;
+            }
+          } else if (SDL.audio.format == 0x0008 /*AUDIO_U8*/) {
+            for(var j = 0; j < sizeSamplesPerChannel; ++j) {
+              var v = (HEAP8[(((heapPtr)+(j*numChannels + c))>>0)]);
+              channelData[j] = ((v >= 0) ? v-128 : v+128) /128;
+            }
+          }
+        }
+      },debugSurface:function (surfData) {
+        console.log('dumping surface ' + [surfData.surf, surfData.source, surfData.width, surfData.height]);
+        var image = surfData.ctx.getImageData(0, 0, surfData.width, surfData.height);
+        var data = image.data;
+        var num = Math.min(surfData.width, surfData.height);
+        for (var i = 0; i < num; i++) {
+          console.log('   diagonal ' + i + ':' + [data[i*surfData.width*4 + i*4 + 0], data[i*surfData.width*4 + i*4 + 1], data[i*surfData.width*4 + i*4 + 2], data[i*surfData.width*4 + i*4 + 3]]);
+        }
+      },joystickEventState:1,lastJoystickState:{},joystickNamePool:{},recordJoystickState:function (joystick, state) {
+        // Standardize button state.
+        var buttons = new Array(state.buttons.length);
+        for (var i = 0; i < state.buttons.length; i++) {
+          buttons[i] = SDL.getJoystickButtonState(state.buttons[i]);
+        }
+  
+        SDL.lastJoystickState[joystick] = {
+          buttons: buttons,
+          axes: state.axes.slice(0),
+          timestamp: state.timestamp,
+          index: state.index,
+          id: state.id
+        };
+      },getJoystickButtonState:function (button) {
+        if (typeof button === 'object') {
+          // Current gamepad API editor's draft (Firefox Nightly)
+          // https://dvcs.w3.org/hg/gamepad/raw-file/default/gamepad.html#idl-def-GamepadButton
+          return button['pressed'];
+        } else {
+          // Current gamepad API working draft (Firefox / Chrome Stable)
+          // http://www.w3.org/TR/2012/WD-gamepad-20120529/#gamepad-interface
+          return button > 0;
+        }
+      },queryJoysticks:function () {
+        for (var joystick in SDL.lastJoystickState) {
+          var state = SDL.getGamepad(joystick - 1);
+          var prevState = SDL.lastJoystickState[joystick];
+          // If joystick was removed, state returns null.
+          if (typeof state === 'undefined') return;
+          // Check only if the timestamp has differed.
+          // NOTE: Timestamp is not available in Firefox.
+          if (typeof state.timestamp !== 'number' || state.timestamp !== prevState.timestamp) {
+            var i;
+            for (i = 0; i < state.buttons.length; i++) {
+              var buttonState = SDL.getJoystickButtonState(state.buttons[i]);
+              // NOTE: The previous state already has a boolean representation of
+              //       its button, so no need to standardize its button state here.
+              if (buttonState !== prevState.buttons[i]) {
+                // Insert button-press event.
+                SDL.events.push({
+                  type: buttonState ? 'joystick_button_down' : 'joystick_button_up',
+                  joystick: joystick,
+                  index: joystick - 1,
+                  button: i
+                });
+              }
+            }
+            for (i = 0; i < state.axes.length; i++) {
+              if (state.axes[i] !== prevState.axes[i]) {
+                // Insert axes-change event.
+                SDL.events.push({
+                  type: 'joystick_axis_motion',
+                  joystick: joystick,
+                  index: joystick - 1,
+                  axis: i,
+                  value: state.axes[i]
+                });
+              }
+            }
+  
+            SDL.recordJoystickState(joystick, state);
+          }
+        }
+      },joystickAxisValueConversion:function (value) {
+        // Make sure value is properly clamped
+        value = Math.min(1, Math.max(value, -1));
+        // Ensures that 0 is 0, 1 is 32767, and -1 is 32768.
+        return Math.ceil(((value+1) * 32767.5) - 32768);
+      },getGamepads:function () {
+        var fcn = navigator.getGamepads || navigator.webkitGamepads || navigator.mozGamepads || navigator.gamepads || navigator.webkitGetGamepads;
+        if (fcn !== undefined) {
+          // The function must be applied on the navigator object.
+          return fcn.apply(navigator);
+        } else {
+          return [];
+        }
+      },getGamepad:function (deviceIndex) {
+        var gamepads = SDL.getGamepads();
+        if (gamepads.length > deviceIndex && deviceIndex >= 0) {
+          return gamepads[deviceIndex];
+        }
+        return null;
+      }};function _SDL_SetVideoMode(width, height, depth, flags) {
+      ['touchstart', 'touchend', 'touchmove', 'mousedown', 'mouseup', 'mousemove', 'DOMMouseScroll', 'mousewheel', 'wheel', 'mouseout'].forEach(function(event) {
+        Module['canvas'].addEventListener(event, SDL.receiveEvent, true);
+      });
+  
+      var canvas = Module['canvas'];
+  
+      // (0,0) means 'use fullscreen' in native; in Emscripten, use the current canvas size.
+      if (width == 0 && height == 0) {
+        width = canvas.width;
+        height = canvas.height;
+      }
+  
+      if (!SDL.addedResizeListener) {
+        SDL.addedResizeListener = true;
+        Browser.resizeListeners.push(function(w, h) {
+          if (!SDL.settingVideoMode) {
+            SDL.receiveEvent({
+              type: 'resize',
+              w: w,
+              h: h
+            });
+          }
+        });
+      }
+  
+      if (width !== canvas.width || height !== canvas.height) {
+        SDL.settingVideoMode = true; // SetVideoMode itself should not trigger resize events
+        Browser.setCanvasSize(width, height);
+        SDL.settingVideoMode = false;
+      }
+  
+      // Free the old surface first if there is one
+      if (SDL.screen) {
+        SDL.freeSurface(SDL.screen);
+        assert(!SDL.screen);
+      }
+  
+      if (SDL.GL) flags = flags | 0x04000000; // SDL_OPENGL - if we are using GL, then later calls to SetVideoMode may not mention GL, but we do need it. Once in GL mode, we never leave it.
+  
+      SDL.screen = SDL.makeSurface(width, height, flags, true, 'screen');
+  
+      return SDL.screen;
+    }
+
+
+  function ___lock() {}
+
+  function ___unlock() {}
 
   
   var SYSCALLS={varargs:0,get:function (varargs) {
@@ -2089,7 +4694,215 @@ function copyTempDouble(ptr) {
         return low;
       },getZero:function () {
         assert(SYSCALLS.get() === 0);
-      }};function ___syscall140(which, varargs) {SYSCALLS.varargs = varargs;
+      }};function ___syscall6(which, varargs) {SYSCALLS.varargs = varargs;
+  try {
+   // close
+      var stream = SYSCALLS.getStreamFromFD();
+      FS.close(stream);
+      return 0;
+    } catch (e) {
+    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
+    return -e.errno;
+  }
+  }
+
+  function _SDL_UnlockSurface(surf) {
+      assert(!SDL.GL); // in GL mode we do not keep around 2D canvases and contexts
+  
+      var surfData = SDL.surfaces[surf];
+  
+      if (!surfData.locked || --surfData.locked > 0) {
+        return;
+      }
+  
+      // Copy pixel data to image
+      if (surfData.isFlagSet(0x00200000 /* SDL_HWPALETTE */)) {
+        SDL.copyIndexedColorData(surfData);
+      } else if (!surfData.colors) {
+        var data = surfData.image.data;
+        var buffer = surfData.buffer;
+        assert(buffer % 4 == 0, 'Invalid buffer offset: ' + buffer);
+        var src = buffer >> 2;
+        var dst = 0;
+        var isScreen = surf == SDL.screen;
+        var num;
+        if (typeof CanvasPixelArray !== 'undefined' && data instanceof CanvasPixelArray) {
+          // IE10/IE11: ImageData objects are backed by the deprecated CanvasPixelArray,
+          // not UInt8ClampedArray. These don't have buffers, so we need to revert
+          // to copying a byte at a time. We do the undefined check because modern
+          // browsers do not define CanvasPixelArray anymore.
+          num = data.length;
+          while (dst < num) {
+            var val = HEAP32[src]; // This is optimized. Instead, we could do HEAP32[(((buffer)+(dst))>>2)];
+            data[dst  ] = val & 0xff;
+            data[dst+1] = (val >> 8) & 0xff;
+            data[dst+2] = (val >> 16) & 0xff;
+            data[dst+3] = isScreen ? 0xff : ((val >> 24) & 0xff);
+            src++;
+            dst += 4;
+          }
+        } else {
+          var data32 = new Uint32Array(data.buffer);
+          if (isScreen && SDL.defaults.opaqueFrontBuffer) {
+            num = data32.length;
+            // logically we need to do
+            //      while (dst < num) {
+            //          data32[dst++] = HEAP32[src++] | 0xff000000
+            //      }
+            // the following code is faster though, because
+            // .set() is almost free - easily 10x faster due to
+            // native memcpy efficiencies, and the remaining loop
+            // just stores, not load + store, so it is faster
+            data32.set(HEAP32.subarray(src, src + num));
+            var data8 = new Uint8Array(data.buffer);
+            var i = 3;
+            var j = i + 4*num;
+            if (num % 8 == 0) {
+              // unrolling gives big speedups
+              while (i < j) {
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+              }
+             } else {
+              while (i < j) {
+                data8[i] = 0xff;
+                i = i + 4 | 0;
+              }
+            }
+          } else {
+            data32.set(HEAP32.subarray(src, src + data32.length));
+          }
+        }
+      } else {
+        var width = Module['canvas'].width;
+        var height = Module['canvas'].height;
+        var s = surfData.buffer;
+        var data = surfData.image.data;
+        var colors = surfData.colors; // TODO: optimize using colors32
+        for (var y = 0; y < height; y++) {
+          var base = y*width*4;
+          for (var x = 0; x < width; x++) {
+            // See comment above about signs
+            var val = HEAPU8[((s++)>>0)] * 4;
+            var start = base + x*4;
+            data[start]   = colors[val];
+            data[start+1] = colors[val+1];
+            data[start+2] = colors[val+2];
+          }
+          s += width*3;
+        }
+      }
+      // Copy to canvas
+      surfData.ctx.putImageData(surfData.image, 0, 0);
+      // Note that we save the image, so future writes are fast. But, memory is not yet released
+    }
+
+   
+  Module["_sbrk"] = _sbrk;
+
+  function _SDL_Init(initFlags) {
+      SDL.startTime = Date.now();
+      SDL.initFlags = initFlags;
+  
+      // capture all key events. we just keep down and up, but also capture press to prevent default actions
+      if (!Module['doNotCaptureKeyboard']) {
+        var keyboardListeningElement = Module['keyboardListeningElement'] || document;
+        keyboardListeningElement.addEventListener("keydown", SDL.receiveEvent);
+        keyboardListeningElement.addEventListener("keyup", SDL.receiveEvent);
+        keyboardListeningElement.addEventListener("keypress", SDL.receiveEvent);
+        window.addEventListener("focus", SDL.receiveEvent);
+        window.addEventListener("blur", SDL.receiveEvent);
+        document.addEventListener("visibilitychange", SDL.receiveEvent);
+      }
+  
+      if (initFlags & 0x200) {
+        // SDL_INIT_JOYSTICK
+        // Firefox will not give us Joystick data unless we register this NOP
+        // callback.
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=936104
+        addEventListener("gamepadconnected", function() {});
+      }
+  
+      window.addEventListener("unload", SDL.receiveEvent);
+      SDL.keyboardState = _malloc(0x10000); // Our SDL needs 512, but 64K is safe for older SDLs
+      _memset(SDL.keyboardState, 0, 0x10000);
+      // Initialize this structure carefully for closure
+      SDL.DOMEventToSDLEvent['keydown']    = 0x300  /* SDL_KEYDOWN */;
+      SDL.DOMEventToSDLEvent['keyup']      = 0x301  /* SDL_KEYUP */;
+      SDL.DOMEventToSDLEvent['keypress']   = 0x303  /* SDL_TEXTINPUT */;
+      SDL.DOMEventToSDLEvent['mousedown']  = 0x401  /* SDL_MOUSEBUTTONDOWN */;
+      SDL.DOMEventToSDLEvent['mouseup']    = 0x402  /* SDL_MOUSEBUTTONUP */;
+      SDL.DOMEventToSDLEvent['mousemove']  = 0x400  /* SDL_MOUSEMOTION */;
+      SDL.DOMEventToSDLEvent['wheel']      = 0x403  /* SDL_MOUSEWHEEL */; 
+      SDL.DOMEventToSDLEvent['touchstart'] = 0x700  /* SDL_FINGERDOWN */;
+      SDL.DOMEventToSDLEvent['touchend']   = 0x701  /* SDL_FINGERUP */;
+      SDL.DOMEventToSDLEvent['touchmove']  = 0x702  /* SDL_FINGERMOTION */;
+      SDL.DOMEventToSDLEvent['unload']     = 0x100  /* SDL_QUIT */;
+      SDL.DOMEventToSDLEvent['resize']     = 0x7001 /* SDL_VIDEORESIZE/SDL_EVENT_COMPAT2 */;
+      SDL.DOMEventToSDLEvent['visibilitychange'] = 0x200 /* SDL_WINDOWEVENT */;
+      SDL.DOMEventToSDLEvent['focus']      = 0x200 /* SDL_WINDOWEVENT */;
+      SDL.DOMEventToSDLEvent['blur']       = 0x200 /* SDL_WINDOWEVENT */;
+  
+      // These are not technically DOM events; the HTML gamepad API is poll-based.
+      // However, we define them here, as the rest of the SDL code assumes that
+      // all SDL events originate as DOM events.
+      SDL.DOMEventToSDLEvent['joystick_axis_motion'] = 0x600 /* SDL_JOYAXISMOTION */;
+      SDL.DOMEventToSDLEvent['joystick_button_down'] = 0x603 /* SDL_JOYBUTTONDOWN */;
+      SDL.DOMEventToSDLEvent['joystick_button_up'] = 0x604 /* SDL_JOYBUTTONUP */;
+      return 0; // success
+    }
+
+  function _SDL_Flip(surf) {
+      // We actually do this in Unlock, since the screen surface has as its canvas
+      // backing the page canvas element
+    }
+
+  function _SDL_MapRGBA(fmt, r, g, b, a) {
+      SDL.checkPixelFormat(fmt);
+      // We assume the machine is little-endian.
+      return r&0xff|(g&0xff)<<8|(b&0xff)<<16|(a&0xff)<<24;
+    }
+
+  
+  function _emscripten_memcpy_big(dest, src, num) {
+      HEAPU8.set(HEAPU8.subarray(src, src+num), dest);
+      return dest;
+    } 
+  Module["_memcpy"] = _memcpy;
+
+  
+  function _SDL_AudioQuit() {
+      for (var i = 0; i < SDL.numChannels; ++i) {
+        if (SDL.channels[i].audio) {
+          SDL.channels[i].audio.pause();
+          SDL.channels[i].audio = undefined;
+        }
+      }
+      if (SDL.music.audio) SDL.music.audio.pause();
+      SDL.music.audio = undefined;
+    }function _SDL_Quit() {
+      _SDL_AudioQuit();
+      Module.print('SDL_Quit called (and ignored)');
+    }
+
+   
+  Module["_llvm_bswap_i32"] = _llvm_bswap_i32;
+
+  function ___syscall140(which, varargs) {SYSCALLS.varargs = varargs;
   try {
    // llseek
       var stream = SYSCALLS.getStreamFromFD(), offset_high = SYSCALLS.get(), offset_low = SYSCALLS.get(), result = SYSCALLS.get(), whence = SYSCALLS.get();
@@ -2148,20 +4961,30 @@ function copyTempDouble(ptr) {
     return -e.errno;
   }
   }
-
-  function ___unlock() {}
-
-  function ___syscall6(which, varargs) {SYSCALLS.varargs = varargs;
-  try {
-   // close
-      var stream = SYSCALLS.getStreamFromFD();
-      FS.close(stream);
-      return 0;
-    } catch (e) {
-    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
-    return -e.errno;
-  }
-  }
+var GLctx; GL.init();
+Module["requestFullScreen"] = function Module_requestFullScreen(lockPointer, resizeCanvas, vrDevice) { Module.printErr("Module.requestFullScreen is deprecated. Please call Module.requestFullscreen instead."); Module["requestFullScreen"] = Module["requestFullscreen"]; Browser.requestFullScreen(lockPointer, resizeCanvas, vrDevice) };
+  Module["requestFullscreen"] = function Module_requestFullscreen(lockPointer, resizeCanvas, vrDevice) { Browser.requestFullscreen(lockPointer, resizeCanvas, vrDevice) };
+  Module["requestAnimationFrame"] = function Module_requestAnimationFrame(func) { Browser.requestAnimationFrame(func) };
+  Module["setCanvasSize"] = function Module_setCanvasSize(width, height, noUpdates) { Browser.setCanvasSize(width, height, noUpdates) };
+  Module["pauseMainLoop"] = function Module_pauseMainLoop() { Browser.mainLoop.pause() };
+  Module["resumeMainLoop"] = function Module_resumeMainLoop() { Browser.mainLoop.resume() };
+  Module["getUserMedia"] = function Module_getUserMedia() { Browser.getUserMedia() }
+  Module["createContext"] = function Module_createContext(canvas, useWebGL, setInModule, webGLContextAttributes) { return Browser.createContext(canvas, useWebGL, setInModule, webGLContextAttributes) };
+if (ENVIRONMENT_IS_NODE) {
+    _emscripten_get_now = function _emscripten_get_now_actual() {
+      var t = process['hrtime']();
+      return t[0] * 1e3 + t[1] / 1e6;
+    };
+  } else if (typeof dateNow !== 'undefined') {
+    _emscripten_get_now = dateNow;
+  } else if (typeof self === 'object' && self['performance'] && typeof self['performance']['now'] === 'function') {
+    _emscripten_get_now = function() { return self['performance']['now'](); };
+  } else if (typeof performance === 'object' && typeof performance['now'] === 'function') {
+    _emscripten_get_now = function() { return performance['now'](); };
+  } else {
+    _emscripten_get_now = Date.now;
+  };
+___buildEnvironment(ENV);;
 /* flush anything remaining in the buffer during shutdown */ __ATEXIT__.push(function() { var fflush = Module["_fflush"]; if (fflush) fflush(0); var printChar = ___syscall146.printChar; if (!printChar) return; var buffers = ___syscall146.buffers; if (buffers[1].length) printChar(1, 10); if (buffers[2].length) printChar(2, 10); });;
 DYNAMICTOP_PTR = allocate(1, "i32", ALLOC_STATIC);
 
@@ -2207,7 +5030,7 @@ function invoke_iiii(index,a1,a2,a3) {
 
 Module.asmGlobalArg = { "Math": Math, "Int8Array": Int8Array, "Int16Array": Int16Array, "Int32Array": Int32Array, "Uint8Array": Uint8Array, "Uint16Array": Uint16Array, "Uint32Array": Uint32Array, "Float32Array": Float32Array, "Float64Array": Float64Array, "NaN": NaN, "Infinity": Infinity };
 
-Module.asmLibraryArg = { "abort": abort, "assert": assert, "enlargeMemory": enlargeMemory, "getTotalMemory": getTotalMemory, "abortOnCannotGrowMemory": abortOnCannotGrowMemory, "abortStackOverflow": abortStackOverflow, "nullFunc_ii": nullFunc_ii, "nullFunc_iiii": nullFunc_iiii, "invoke_ii": invoke_ii, "invoke_iiii": invoke_iiii, "___lock": ___lock, "___syscall6": ___syscall6, "___setErrNo": ___setErrNo, "_abort": _abort, "___syscall140": ___syscall140, "_emscripten_memcpy_big": _emscripten_memcpy_big, "___syscall54": ___syscall54, "___unlock": ___unlock, "___syscall146": ___syscall146, "DYNAMICTOP_PTR": DYNAMICTOP_PTR, "tempDoublePtr": tempDoublePtr, "ABORT": ABORT, "STACKTOP": STACKTOP, "STACK_MAX": STACK_MAX };
+Module.asmLibraryArg = { "abort": abort, "assert": assert, "enlargeMemory": enlargeMemory, "getTotalMemory": getTotalMemory, "abortOnCannotGrowMemory": abortOnCannotGrowMemory, "abortStackOverflow": abortStackOverflow, "nullFunc_ii": nullFunc_ii, "nullFunc_iiii": nullFunc_iiii, "invoke_ii": invoke_ii, "invoke_iiii": invoke_iiii, "_Mix_LoadWAV_RW": _Mix_LoadWAV_RW, "_putenv": _putenv, "_SDL_SetVideoMode": _SDL_SetVideoMode, "_IMG_Load": _IMG_Load, "_abort": _abort, "_TTF_FontHeight": _TTF_FontHeight, "_SDL_CloseAudio": _SDL_CloseAudio, "_emscripten_set_main_loop_timing": _emscripten_set_main_loop_timing, "_SDL_GetTicks": _SDL_GetTicks, "___buildEnvironment": ___buildEnvironment, "_SDL_LockSurface": _SDL_LockSurface, "___setErrNo": ___setErrNo, "_SDL_PauseAudio": _SDL_PauseAudio, "_SDL_Init": _SDL_Init, "_Mix_PlayChannel": _Mix_PlayChannel, "_TTF_RenderText_Solid": _TTF_RenderText_Solid, "_Mix_FreeChunk": _Mix_FreeChunk, "_IMG_Load_RW": _IMG_Load_RW, "_Mix_PlayMusic": _Mix_PlayMusic, "_emscripten_memcpy_big": _emscripten_memcpy_big, "_TTF_SizeText": _TTF_SizeText, "_SDL_UpperBlit": _SDL_UpperBlit, "_SDL_UpperBlitScaled": _SDL_UpperBlitScaled, "___syscall54": ___syscall54, "___unlock": ___unlock, "_SDL_AudioQuit": _SDL_AudioQuit, "_emscripten_set_main_loop": _emscripten_set_main_loop, "_emscripten_get_now": _emscripten_get_now, "_getenv": _getenv, "___lock": ___lock, "_SDL_UnlockSurface": _SDL_UnlockSurface, "___syscall6": ___syscall6, "_Mix_HaltMusic": _Mix_HaltMusic, "_SDL_MapRGBA": _SDL_MapRGBA, "_SDL_Flip": _SDL_Flip, "_SDL_FreeRW": _SDL_FreeRW, "___syscall140": ___syscall140, "_SDL_RWFromConstMem": _SDL_RWFromConstMem, "_SDL_Quit": _SDL_Quit, "___syscall146": ___syscall146, "_SDL_RWFromFile": _SDL_RWFromFile, "DYNAMICTOP_PTR": DYNAMICTOP_PTR, "tempDoublePtr": tempDoublePtr, "ABORT": ABORT, "STACKTOP": STACKTOP, "STACK_MAX": STACK_MAX };
 // EMSCRIPTEN_START_ASM
 var asm =Module["asm"]// EMSCRIPTEN_END_ASM
 (Module.asmGlobalArg, Module.asmLibraryArg, buffer);
